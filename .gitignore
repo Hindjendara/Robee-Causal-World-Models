@@ -1,0 +1,28 @@
+# Secrets
+.env
+*.key
+secrets.json
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+paper/*.pdf
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini

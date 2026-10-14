@@ -1,0 +1,104 @@
+You are an expert at converting unstructured human narratives and advice articles into a
+structured RECIPE GRAPH: a clean flowchart of how to reach a goal.
+
+The graph is deliberately simple. ALL the meaning is in the NODES and how they are wired
+together — the edges are just plain arrows showing flow. Someone who follows the arrows from the
+start reaches the goal. It is NOT a chronological retelling; it is the reusable procedure.
+
+============================================================
+NODES — only TWO types
+============================================================
+Every node has a `type` that is either "step" or "condition":
+
+- "step"       A concrete action to perform. e.g. "Attain a high undergraduate GPA",
+               "Email potential supervisors", "Submit the application".
+- "condition"  A decision / branch point — a yes/no or which-way question whose answer decides
+               where the flow goes next. e.g. "Do you already have a Master's?",
+               "Is the GRE required?". A condition node has MORE THAN ONE outgoing arrow (its
+               branches). Use "condition" whenever the text forks on "if / whether / depending on".
+
+Each node: {"id":"r1","type":"step|condition","label":"<concise text>",
+            "evidence":"<verbatim quote>","certainty":"stated|implied"}
+
+============================================================
+EDGES — all identical, just direction of flow
+============================================================
+Each edge = {"source":"<id>","target":"<id>"}   (no labels, no conditions, all the same)
+
+The STRUCTURE carries the logic — read it from the wiring, not from edge text:
+
+- BRANCHING: a "condition" node has several outgoing arrows, one per possible answer. The
+  branch's meaning is read from the TARGET step's label (e.g. condition "Is the GRE required?"
+  → arrow to step "Take the GRE", and arrow to step "Skip the GRE").
+
+- CONVERGENCE (prerequisites): if a step depends on SEVERAL earlier nodes, draw an arrow from
+  EACH prerequisite INTO that step. Two arrows landing on the same node means BOTH predecessors
+  are needed to reach it. Example: "attain a high GPA" → "apply", and "build a personal
+  statement" → "apply" (both converge on "apply"). Do NOT chain independent prerequisites into
+  an arbitrary single line — converge them instead.
+
+- LOOP: to repeat, draw an arrow from a later node BACK to an earlier node. A backward arrow IS
+  the loop (e.g. "revise draft" → ... → "not good enough yet" back to "revise draft").
+
+RULES:
+- Every "condition" node needs at least two outgoing arrows. A node with one next step is a
+  "step", not a "condition".
+- One node per distinct action/decision (merge duplicates). Don't invent branches, prerequisites
+  or loops the text doesn't support; when order is arbitrary, converge with a plain arrow.
+- Keep it clean and followable: a reader tracing arrows from the first node can execute it.
+
+============================================================
+GROUNDING RULES (no hallucination)
+============================================================
+- Every node's "evidence" is a VERBATIM substring of the source (copied exactly).
+- "certainty" = "stated" if explicit, "implied" if safely inferred (use sparingly).
+- "label" is your own concise wording; may generalize but must match the evidence.
+- Generic advice: treat the recommended procedure as the recipe.
+
+============================================================
+OUTPUT FORMAT
+============================================================
+Return ONLY the JSON below, wrapped in <recipe_graph></recipe_graph> tags. No prose, no fences
+outside the tags. Node ids "r1","r2",... in execution order where possible.
+
+<recipe_graph>
+{
+  "source_id": "unknown",
+  "goal": "<one-sentence overall goal>",
+  "domain": "<short domain phrase>",
+  "nodes": [
+    {"id":"r1","type":"step","label":"Attain a high undergraduate GPA","evidence":"...","certainty":"stated"},
+    {"id":"r2","type":"step","label":"Build a strong personal statement","evidence":"...","certainty":"stated"},
+    {"id":"r3","type":"step","label":"Apply to the programme","evidence":"...","certainty":"stated"},
+    {"id":"r4","type":"condition","label":"Is the GRE required?","evidence":"...","certainty":"stated"},
+    {"id":"r5","type":"step","label":"Take the GRE","evidence":"...","certainty":"stated"},
+    {"id":"r6","type":"step","label":"Skip the GRE","evidence":"...","certainty":"stated"}
+  ],
+  "edges": [
+    {"source":"r1","target":"r3"},
+    {"source":"r2","target":"r3"},
+    {"source":"r3","target":"r4"},
+    {"source":"r4","target":"r5"},
+    {"source":"r4","target":"r6"}
+  ],
+  "unknowns": ["<detail the procedure depends on but the text does not give>"]
+}
+</recipe_graph>
+
+In the example: r1 and r2 both converge on r3 (joint prerequisites); r4 is a condition with two
+outgoing branches (r5 / r6). All edges are identical arrows — the wiring tells the story.
+
+============================================================
+SELF-CHECK BEFORE YOU ANSWER
+============================================================
+1. Are all nodes typed "step" or "condition", and does every "condition" have >= 2 outgoing arrows?
+2. Where several nodes are prerequisites of a later step, did I converge them (an arrow from each
+   into that step) instead of an arbitrary chain?
+3. Is every loop expressed as a backward arrow to an earlier node?
+4. Are edges plain {source,target} with no labels? Every "evidence" an exact substring?
+5. Valid JSON, nothing outside the tags?
+
+SOURCE TEXT:
+"""
+{{INTERVIEW_TEXT}}
+"""

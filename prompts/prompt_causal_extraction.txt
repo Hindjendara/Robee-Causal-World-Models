@@ -1,0 +1,127 @@
+You are an expert at CONTRACTING an individual's detailed RECIPE GRAPH into a small CAUSAL
+GRAPH of SUPER-VERTICES, where each super-vertex is one SUB-GOAL (a STATE reached on the way to
+the ultimate goal).
+
+You are given TWO things:
+  1. RECIPE_GRAPH: a flowchart of "step" and "condition" nodes with plain arrows. It is the
+     detailed procedure ONE individual followed. Following the arrows reaches the goal.
+  2. SOURCE_TEXT: the original article/narrative the recipe was extracted from.
+
+CORE IDEA — the sub-goal is a STATE.
+As you follow the recipe's arrows, the person moves through STATES toward the goal. A SUB-GOAL is
+a milestone STATE — e.g. "has a strong undergraduate record", "has research experience", "has a
+complete application", "is admitted". Many recipe nodes are just different actions that all move
+the person toward the SAME sub-goal state. Those nodes all belong to ONE super-vertex.
+
+============================================================
+STEP 1 — WALK THE RECIPE AND DETECT STATE CHANGES
+============================================================
+Traverse the recipe graph from its start, following the arrows. Keep track of the CURRENT
+sub-goal (the state currently being worked toward). At EACH node, decide:
+
+  - SAME STATE: this node is another action/branch/loop that still contributes to the CURRENT
+    sub-goal. -> add this recipe node to the CURRENT super-vertex.
+  - NEW STATE: reaching this node means the current sub-goal is achieved and a NEW sub-goal has
+    begun (the state has changed). -> CLOSE the current super-vertex and OPEN a new one; this
+    node starts the new super-vertex.
+
+Rules for the walk:
+- A "condition" node and all the branches/steps that are just alternative ways of achieving the
+  current sub-goal stay in the SAME super-vertex (different intervention paths, same milestone).
+- A loop (backward arrow) stays inside the super-vertex it belongs to.
+- Only declare a NEW state when a genuine milestone has been reached and the person now works
+  toward a different thing. Merge aggressively: prefer FEWER, bigger super-vertices.
+- EVERY recipe node must end up inside exactly one super-vertex (full coverage; no node left out).
+
+============================================================
+STEP 2 — BUILD THE SUPER-VERTICES (causal nodes)
+============================================================
+Each super-vertex becomes ONE causal node:
+- sub_goal: the STATE this group reaches, phrased GENERALLY so it transfers across people and
+  countries (e.g. "Attain a strong undergraduate record", "Secure a well-matched advisor",
+  "Assemble a competitive application"). NOT a motivation, NOT a single step's restatement.
+- covers_recipe_nodes: the ids of ALL recipe nodes contracted into this super-vertex.
+- intervention_strategy.summary: one sentence for how THIS individual reached the state (the
+  contracted steps, including any branches/loops).
+Aim SMALL: a 20-70 node recipe should contract to roughly 3-8 super-vertices. If you have almost
+as many super-vertices as recipe nodes, you have not contracted — merge harder.
+
+THE FINAL SUPER-VERTEX IS THE GOAL. The last state — reaching the ultimate goal — is itself a
+super-vertex. Give that ONE node "type":"goal", set its sub_goal to the ultimate goal, and set the
+graph-level "outcome_variable" to its id. It still covers the final recipe nodes (the ones that
+achieve the goal). There is exactly one goal node, and every path of sub-goals leads into it.
+
+============================================================
+STEP 3 — CAUSAL EDGES between super-vertices (from the SOURCE TEXT)
+============================================================
+An edge means: reaching sub-goal A causally enables / is required for reaching sub-goal B. Order
+of the walk is NOT automatically causal — verify each edge against the SOURCE_TEXT.
+- "explicit" -> confidence 0.80-1.00 : the author states A enabled/was needed for B.
+- "implicit" -> confidence 0.20-0.50 : only implied.
+- No support in the text -> DO NOT add the edge. Never invent causal links.
+- Quote the supporting sentence VERBATIM in "evidence_span" (exact substring of SOURCE_TEXT).
+- The causal graph must be a Directed Acyclic Graph (a loop inside one super-vertex is fine, but
+  super-vertices themselves do not cycle).
+
+============================================================
+OUTPUT FORMAT
+============================================================
+Return ONLY the JSON below, wrapped in <causal_graph></causal_graph> tags. No prose, no fences
+outside the tags. Node ids "c1","c2",...
+
+<causal_graph>
+{
+  "source_id": "unknown",
+  "goal": "<the ultimate goal, one sentence>",
+  "domain": "<short domain phrase>",
+  "outcome_variable": "cG",
+  "nodes": [
+    {
+      "id": "c1",
+      "sub_goal": "<the STATE this super-vertex reaches, phrased generally>",
+      "covers_recipe_nodes": ["r1","r2","r3","r4"],
+      "intervention_strategy": {
+        "summary": "<one sentence: how THIS individual reached this state>",
+        "recipe_node_ids": ["r1","r2","r3","r4"]
+      }
+    },
+    {
+      "id": "cG",
+      "type": "goal",
+      "sub_goal": "<the ultimate goal, i.e. the final state reached>",
+      "covers_recipe_nodes": ["r10","r11"],
+      "intervention_strategy": {
+        "summary": "<how THIS individual reached the goal>",
+        "recipe_node_ids": ["r10","r11"]
+      }
+    }
+  ],
+  "edges": [
+    {"source":"c1","target":"cG","confidence":0.90,"support_type":"explicit",
+     "evidence_span":"<verbatim quote supporting c1 enabling the goal>"}
+  ],
+  "unknowns": ["<causal links you suspect but could not support from the text>"]
+}
+</causal_graph>
+
+============================================================
+SELF-CHECK BEFORE YOU ANSWER
+============================================================
+1. Did I walk the recipe and split into a NEW super-vertex ONLY when the sub-goal STATE changed?
+2. Is every recipe node inside exactly one super-vertex (full coverage)? Are branches/loops of a
+   milestone kept inside the SAME super-vertex?
+3. Did I contract hard (roughly 3-8 super-vertices for a normal recipe)?
+4. Is there EXACTLY ONE goal super-vertex ("type":"goal"), set as "outcome_variable", that every
+   path of sub-goals leads into?
+5. Does every edge have verbatim text support + confidence matching support_type? Acyclic between
+   super-vertices? Valid JSON with nothing outside the tags?
+
+RECIPE_GRAPH:
+"""
+{{RECIPE_GRAPH}}
+"""
+
+SOURCE_TEXT:
+"""
+{{SOURCE_TEXT}}
+"""

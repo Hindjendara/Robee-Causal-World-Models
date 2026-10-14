@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>QCRI · Graph Visualizer</title>
+<style>
+  :root{
+    --ink:#111b22; --body:#35424b; --blue:#0096d6; --bluedk:#0b5e86;
+    --tint:#eaf6fc; --tint2:#f5fbfe; --gray:#6b7882; --line:#dbe6ec; --white:#fff;
+    /* trajectory / recipe node type colors */
+    --start:#0b5e86; --goal:#0096d6; --action:#4fb0da; --event:#7f93a0;
+    --milestone:#1f9e6e; --obstacle:#e08a2b; --retry:#9b5de5; --outcome:#13886a;
+    --step:#4fb0da; --condition:#e0a12b; --resource:#7c5cbf;
+    /* causal node type colors */
+    --cause:#0096d6; --mechanism:#0b5e86; --mediator:#7c5cbf; --confounder:#e08a2b;
+    --subgoal:#0b7285;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:Calibri,Segoe UI,Arial,sans-serif;color:var(--ink);background:#fff}
+  header{padding:12px 20px;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-family:Cambria,Georgia,serif;font-size:20px;margin:0;color:var(--ink)}
+  header .kick{color:var(--blue);font-weight:bold;letter-spacing:1.5px;font-size:11px;text-transform:uppercase}
+  header .sub{font-size:12px;color:var(--gray)}
+  .wrap{display:flex;gap:0;height:calc(100vh - 51px);min-height:520px}
+  .left{width:344px;min-width:300px;border-right:1px solid var(--line);padding:14px;overflow:auto;background:var(--tint2)}
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .toolbar{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff}
+  .canvas{flex:1;overflow:hidden;position:relative;background:
+     linear-gradient(0deg,rgba(0,150,214,.045) 1px,transparent 1px),
+     linear-gradient(90deg,rgba(0,150,214,.045) 1px,transparent 1px);
+     background-size:26px 26px}
+  .canvas.dragging{cursor:grabbing}
+  .canvas svg.stage{width:100%;height:100%;display:block;cursor:grab}
+  textarea{width:100%;height:132px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,monospace;font-size:12px;resize:vertical}
+  label.fld{font-size:12px;color:var(--gray);font-weight:bold;display:block;margin:12px 0 4px;text-transform:uppercase;letter-spacing:.4px}
+  button,select,input[type=file],input[type=text]{font-family:inherit;font-size:13px}
+  button{background:var(--blue);color:#fff;border:none;border-radius:7px;padding:7px 12px;cursor:pointer;font-weight:bold}
+  button.sec{background:#fff;color:var(--bluedk);border:1px solid var(--line)}
+  button.sec:hover{background:var(--tint)}
+  button:hover{filter:brightness(1.04)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  select{padding:6px;border:1px solid var(--line);border-radius:7px;background:#fff;max-width:100%}
+  input[type=text]{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px}
+  .meta{font-size:13px;line-height:1.45;color:var(--body)}
+  .meta .ttl{font-family:Cambria,serif;font-size:15px;font-weight:bold;color:var(--ink)}
+  .pill{display:inline-block;background:var(--tint);color:var(--bluedk);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:bold;margin:2px 4px 2px 0}
+  .pill.kind{background:var(--bluedk);color:#fff;text-transform:uppercase;letter-spacing:.6px}
+  .legend{font-size:12px;color:var(--body);margin-top:6px}
+  .legrow{display:flex;align-items:center;gap:7px;margin:3px 0;cursor:default}
+  .sw{width:14px;height:14px;border-radius:4px;flex:none}
+  .detail{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+  .detail .q{background:#fff;border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:6px;padding:8px;font-style:italic;color:var(--body);font-size:12.5px;margin-top:6px}
+  .err{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;color:var(--body);padding:24px}
+  .err .big{font-size:44px;margin-bottom:6px}
+  .err h3{margin:6px 0}
+  .err .box{max-width:460px}
+  .hint{font-size:11px;color:var(--gray);margin-top:6px;line-height:1.4}
+  svg text{font-family:Calibri,Arial,sans-serif}
+  .nodebox{cursor:pointer}
+  .unk li{font-size:12px;color:var(--body);margin-bottom:3px}
+  .small{font-size:11px;color:var(--gray)}
+  .count{font-size:12px;color:var(--gray);margin-left:auto;white-space:nowrap}
+  .filters label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--body);margin:3px 0;cursor:pointer}
+  .filters .sw{width:11px;height:11px;border-radius:3px}
+  .tbtn{display:inline-flex;align-items:center;gap:5px}
+  .focusbar{display:none;align-items:center;gap:8px;font-size:12px;color:var(--bluedk);background:var(--tint);border:1px solid var(--line);border-radius:7px;padding:4px 8px}
+  .focusbar b{color:var(--ink)}
+  .drop{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,150,214,.08);border:2.5px dashed var(--blue);z-index:6;color:var(--bluedk);font-weight:bold;font-size:15px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .divlabel{font-size:11px;color:var(--gray);font-weight:bold;margin:2px 0 2px}
+  a.dl{color:var(--bluedk)}
+  .empty{color:var(--gray);font-size:12.5px}
+  /* zoom HUD */
+  .zoomhud{display:flex;align-items:center;gap:6px}
+  .zoomhud input[type=range]{width:104px;accent-color:var(--blue)}
+  .zoomval{font-size:12px;color:var(--bluedk);font-weight:bold;min-width:44px;text-align:right}
+  .sep{width:1px;height:22px;background:var(--line);margin:0 2px}
+  /* minimap */
+  .minimap{position:absolute;right:12px;bottom:12px;width:190px;height:140px;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 12px rgba(11,94,134,.15);overflow:hidden;z-index:4;cursor:crosshair;display:none}
+  .minimap svg{display:block}
+  .minimap .vp{fill:rgba(0,150,214,.15);stroke:var(--blue);stroke-width:1.4}
+  .minimap .mmttl{position:absolute;top:3px;left:7px;font-size:9.5px;color:var(--gray);letter-spacing:.5px;text-transform:uppercase;pointer-events:none;z-index:5}
+  .navhint{position:absolute;left:12px;bottom:12px;font-size:11px;color:var(--gray);background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:6px;padding:4px 9px;z-index:4;pointer-events:none;max-width:340px;line-height:1.5}
+  .navhint b{color:var(--bluedk)}
+  /* collapsed-recipe-node list (expandable causal super-vertices) */
+  .covlist{margin-top:5px;border:1px solid var(--line);border-radius:7px;background:#fff;overflow:hidden}
+  .covrow{display:flex;align-items:flex-start;gap:6px;padding:5px 7px;border-top:1px solid #eef4f8;font-size:12px;line-height:1.35}
+  .covrow:first-child{border-top:none}
+  .covrow:hover{background:var(--tint2)}
+  .cdot{width:9px;height:9px;border-radius:3px;flex:none;margin-top:3px}
+  .cid{color:var(--gray);font-family:Consolas,monospace;font-size:10.5px;flex:none;min-width:24px;margin-top:1px}
+  .clab{color:var(--body);flex:1;min-width:0}
+  .ctag{flex:none;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:bold;color:var(--gray);border:1px solid var(--line);border-radius:9px;padding:0 5px;margin-top:1px}
+  .ctag.key{color:#fff;background:var(--bluedk);border-color:var(--bluedk)}
+  .covhdr a{cursor:pointer;text-decoration:underline}
+  .warn{background:#fff6e8;border:1px solid #f0d7ae;color:#8a5a12;border-radius:6px;padding:6px 8px;font-size:11.5px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <span class="kick">QCRI · StoPlan</span>
+  <h1>Graph Visualizer</h1>
+  <span class="sub">Trajectory, recipe &amp; causal graphs. Paste model output, upload a file, or drop one on the canvas.</span>
+</header>
+<div class="wrap">
+  <div class="left">
+    <label class="fld" style="margin-top:0">Model output or JSON</label>
+    <textarea id="input" spellcheck="false" placeholder="Paste a &lt;trajectory_graph&gt;, &lt;recipe_graph&gt; or &lt;causal_graph&gt; block, or a raw JSON graph object. Multiple graphs in one paste are fine."></textarea>
+    <div class="row">
+      <button onclick="renderFromInput()">Render</button>
+      <button class="sec" onclick="document.getElementById('file').click()">Upload file</button>
+      <button class="sec" onclick="clearAll()">Clear</button>
+      <input id="file" type="file" accept=".txt,.json,.md,.html,.htm" style="display:none"/>
+    </div>
+    <div id="graphpick" style="display:none">
+      <label class="fld">Graphs found in input</label>
+      <select id="graphsel"></select>
+    </div>
+
+    <div id="meta" class="meta detail"></div>
+
+    <div id="searchwrap" class="detail" style="display:none">
+      <label class="fld" style="margin-top:0">Search</label>
+      <input type="text" id="search" placeholder="Filter nodes by text" oninput="applyView()"/>
+      <label class="fld">Show node types</label>
+      <div id="typefilters" class="filters"></div>
+      <label class="fld">Certainty</label>
+      <div id="certfilters" class="filters"></div>
+    </div>
+
+    <div id="detail" class="detail" style="display:none"></div>
+
+    <div id="legendwrap" class="detail" style="display:none">
+      <label class="fld" style="margin-top:0">Legend · node types</label>
+      <div id="legend" class="legend"></div>
+      <label class="fld">Legend · edges</label>
+      <div id="edgelegend" class="legend"></div>
+      <label class="fld">Certainty (border style)</label>
+      <div class="legend">
+        <div class="legrow"><span class="sw" style="background:#fff;border:2px solid #111b22"></span> stated</div>
+        <div class="legrow"><span class="sw" style="background:#fff;border:2px dashed #111b22"></span> implied</div>
+        <div class="legrow"><span class="sw" style="background:#fff;border:2px dotted #111b22"></span> inferred</div>
+      </div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="toolbar">
+      <button class="sec" onclick="zoomStep(1.2)" title="Zoom in (+)">＋</button>
+      <button class="sec" onclick="zoomStep(1/1.2)" title="Zoom out (−)">－</button>
+      <div class="zoomhud">
+        <input type="range" id="zoomrange" min="5" max="400" value="100" title="Zoom level"/>
+        <span class="zoomval" id="zoomval">100%</span>
+      </div>
+      <button class="sec" onclick="fit()" title="Fit graph to screen (F)">Fit</button>
+      <div class="sep"></div>
+      <button class="sec" id="expbtn" style="display:none" onclick="toggleExpandAll()" title="Show the recipe nodes collapsed inside every super-vertex">Expand all</button>
+      <label class="small tbtn"><input type="checkbox" id="edgelabels" checked onchange="draw()"/> edge labels</label>
+      <label class="small tbtn"><input type="checkbox" id="curved" checked onchange="draw()"/> curved edges</label>
+      <label class="small tbtn"><input type="checkbox" id="scrollzoom" onchange="saveScrollPref()"/> scroll = zoom</label>
+      <div id="focusbar" class="focusbar"><span>Focused on <b id="focusname"></b></span><button class="sec" style="padding:3px 8px" onclick="clearFocus()">Show all</button></div>
+      <button class="sec" onclick="downloadSVG()" title="Download vector SVG">SVG</button>
+      <button class="sec" onclick="downloadPNG()" title="Download high resolution PNG">PNG</button>
+      <span id="count" class="count"></span>
+    </div>
+    <div class="canvas" id="canvas">
+      <div class="drop" id="drop">Drop a graph file to load</div>
+      <div class="minimap" id="minimap"><span class="mmttl">Overview</span></div>
+      <div class="navhint" id="navhint"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const SVGNS="http://www.w3.org/2000/svg";
+
+/* ============================================================
+   Node type registry (union of trajectory + recipe + causal)
+   ============================================================ */
+const TYPES = {
+  // trajectory
+  start_state:{c:"var(--start)", t:"Start state",  g:"●"},
+  goal:       {c:"var(--goal)",  t:"Goal",         g:"◎"},
+  action:     {c:"var(--action)",t:"Action",       g:"▸"},
+  event:      {c:"var(--event)", t:"Event",        g:"◆"},
+  obstacle:   {c:"var(--obstacle)",t:"Obstacle",   g:"✕"},
+  retry:      {c:"var(--retry)", t:"Retry / pivot",g:"↻"},
+  milestone:  {c:"var(--milestone)",t:"Milestone", g:"◆"},
+  outcome:    {c:"var(--outcome)",t:"Outcome",     g:"✓"},
+  // recipe
+  step:       {c:"var(--step)",  t:"Step",         g:"▸"},
+  condition:  {c:"var(--condition)",t:"Condition", g:"◇"},
+  resource:   {c:"var(--resource)",t:"Resource",   g:"▣"},
+  // recipe-as-program primitives (mapped from node.primitive)
+  avoid:      {c:"#d64545",      t:"Avoid (NOT)",  g:"⊘"},
+  loop:       {c:"var(--retry)", t:"Loop",         g:"↻"},
+  logic:      {c:"#5a7d9a",      t:"Logic",        g:"∧"},
+  // causal (mapped from node.var_type)
+  cause:      {c:"var(--cause)", t:"Cause",        g:"◈"},
+  mechanism:  {c:"var(--mechanism)",t:"Mechanism", g:"⚙"},
+  mediator:   {c:"var(--mediator)",t:"Mediator",   g:"↳"},
+  confounder: {c:"var(--confounder)",t:"Confounder (latent)",g:"⚠"},
+  // causal sub-goal nodes (from sub_goal / intervention_strategy schema)
+  subgoal:    {c:"var(--subgoal)",t:"Sub-goal",    g:"◎"},
+  unknown:    {c:"#7f93a0",      t:"Node",         g:"•"}
+};
+const TRAJECTORY_TYPES = ["start_state","action","event","obstacle","retry"];
+const RECIPE_TYPES = ["step","condition","resource"];
+const CAUSAL_TYPES = ["cause","mechanism","mediator","confounder","subgoal"];
+/* map node.primitive (or an unfamiliar type) onto a known type key */
+const PRIM_ALIAS = {
+  op:"step", operation:"step", action:"action", do:"step", seq:"step", sequence:"step",
+  branch:"condition", cond:"condition", condition:"condition", decision:"condition", "if":"condition",
+  not:"avoid", negation:"avoid", avoid:"avoid",
+  loop:"loop", repeat:"loop", "while":"loop", "for":"loop",
+  and:"logic", or:"logic", xor:"logic", logic:"logic",
+  goal:"goal", objective:"goal", start:"start_state", start_state:"start_state",
+  milestone:"milestone", checkpoint:"milestone", resource:"resource", prerequisite:"resource",
+  outcome:"outcome", result:"outcome", end:"outcome", event:"event", obstacle:"obstacle", retry:"retry",
+  // causal var_type aliases
+  cause:"cause", driver:"cause", mechanism:"mechanism", lever:"mechanism",
+  mediator:"mediator", confounder:"confounder", confound:"confounder",
+  subgoal:"subgoal", sub_goal:"subgoal"
+};
+/* ---- v7 causal super-vertex provenance ----------------------------------
+   A causal node may carry the recipe nodes collapsed inside it:
+     covers:            [{id,type,label}]   (v7)  | ["r1","r2"] (legacy)
+     covers_recipe_nodes: legacy name for the same thing
+     internal_edges:    [{source,target}]   recipe arrows inside the group
+     entry_recipe_nodes / exit_recipe_nodes: where flow enters / leaves
+   coversOf() normalises every shape to [{id,type,label}].                  */
+function rawCovers(n){
+  if(!n) return [];
+  const raw = (Array.isArray(n.covers) && n.covers.length) ? n.covers
+            : (Array.isArray(n.covers_recipe_nodes) ? n.covers_recipe_nodes : []);
+  return raw.map(c => (c && typeof c === "object")
+      ? {id:String(c.id!=null?c.id:""), type:c.type||null, label:c.label||null}
+      : {id:String(c), type:null, label:null})
+    .filter(c=>c.id);
+}
+/* A legacy causal graph lists bare ids with no labels. If a recipe graph was pasted
+   alongside it, borrow the label / type / arrows from there so the expansion is
+   still readable without re-running the extraction. */
+let RECIPE_IDX=null, RECIPE_FWD=null;
+function buildRecipeIndex(){
+  RECIPE_IDX=null; RECIPE_FWD=null;
+  if(!curGraph || curKind!=="causal") return;
+  const rg=foundGraphs.find(g=>g!==curGraph && graphKind(g)==="recipe" && (g.nodes||[]).length);
+  if(!rg) return;
+  const idx={}, fwd={};
+  (rg.nodes||[]).forEach(n=>{ if(n&&n.id!=null) idx[String(n.id)]=n; });
+  (rg.edges||[]).forEach(e=>{ if(e&&idx[e.source]&&idx[e.target]) (fwd[e.source]=fwd[e.source]||[]).push(e.target); });
+  let hit=0;
+  (curGraph.nodes||[]).forEach(n=>rawCovers(n).forEach(c=>{ if(idx[c.id]) hit++; }));
+  if(!hit) return;                       // ids don't line up — not the matching recipe
+  RECIPE_IDX=idx; RECIPE_FWD=fwd;
+}
+function coversOf(n){
+  return rawCovers(n).map(c=>{
+    const r = RECIPE_IDX ? RECIPE_IDX[c.id] : null;
+    return {id:c.id,
+            type:  c.type  || (r&&r.type)  || "step",
+            label: c.label || (r&&r.label) || c.id,
+            evidence: (r&&r.evidence)||null};
+  });
+}
+function internalEdgesOf(n){
+  if(n && Array.isArray(n.internal_edges) && n.internal_edges.length)
+    return n.internal_edges.filter(e=>e&&e.source&&e.target);
+  if(RECIPE_FWD){                        // derive them from the pasted recipe graph
+    const inside=new Set(rawCovers(n).map(c=>c.id)), out=[];
+    inside.forEach(s=>(RECIPE_FWD[s]||[]).forEach(t=>{ if(inside.has(t)) out.push({source:s,target:t}); }));
+    return out;
+  }
+  return [];
+}
+/* entry / exit: use the model's lists when present, else infer from the internal arrows */
+function entryExitOf(n, sub){
+  const ent=n&&Array.isArray(n.entry_recipe_nodes)?n.entry_recipe_nodes:null;
+  const ext=n&&Array.isArray(n.exit_recipe_nodes)?n.exit_recipe_nodes:null;
+  if(ent||ext) return {entry:new Set(ent||[]), exit:new Set(ext||[])};
+  const s = sub || subLayout(n, EXPW);
+  // with no internal arrows every step would look like both an entry and an exit — say nothing
+  if(!s.links.length) return {entry:new Set(), exit:new Set()};
+  return {entry:new Set(s.dEntry||[]), exit:new Set(s.dExit||[])};
+}
+function hasCovers(g){ return ((g&&g.nodes)||[]).some(n=>rawCovers(n).length); }
+
+function nodeType(n){
+  // causal sub-goal nodes: no type/var_type/primitive, but carry sub_goal/covers/intervention
+  if(n && !n.type && !n.var_type && !n.primitive &&
+     (n.sub_goal!=null || n.covers!=null || n.covers_recipe_nodes!=null || n.intervention_strategy!=null)) return "subgoal";
+  const raw = n.type || n.var_type || n.primitive || "";
+  if(TYPES[raw]) return raw;
+  const low = String(raw).toLowerCase();
+  if(TYPES[low]) return low;
+  if(PRIM_ALIAS[low]) return PRIM_ALIAS[low];
+  return "unknown";
+}
+
+/* Edge relation styling (trajectory / recipe). back:true = tends to point backward (loop). */
+const RELS = {
+  then:       {stroke:"#5b6770", dash:"",     w:1.9, t:"then",        marker:"arr"},
+  enabled:    {stroke:"#0096d6", dash:"",     w:2.4, t:"enabled",     marker:"arrb"},
+  requires:   {stroke:"#0096d6", dash:"4 3",  w:2.2, t:"requires",    marker:"arrb"},
+  retry_of:   {stroke:"#e08a2b", dash:"6 4",  w:2.3, t:"retry of",    marker:"arro", back:true},
+  repeat:     {stroke:"#9b5de5", dash:"6 4",  w:2.3, t:"repeat",      marker:"arrp", back:true},
+  alternative:{stroke:"#6b7882", dash:"2 4",  w:1.9, t:"alternative", marker:"arrg"},
+  if_true:    {stroke:"#1f9e6e", dash:"",     w:2.3, t:"if",          marker:"arrt"},
+  if_false:   {stroke:"#d64545", dash:"",     w:2.3, t:"else",        marker:"arrf"},
+  repeat_loop:{stroke:"#9b5de5", dash:"6 4",  w:2.3, t:"loop",        marker:"arrp", back:true},
+  unknown:    {stroke:"#5b6770", dash:"",     w:1.9, t:"",            marker:"arr"}
+};
+const BACK_RELS = new Set(["retry_of","repeat","repeat_loop"]);
+/* if/then/else/loop aliases -> canonical relation keys (code-style recipe edges) */
+const REL_ALIAS = {
+  then:"then", seq:"then", sequence:"then", next:"then", "goto":"then", unconditional:"then", always:"then",
+  "if":"if_true", if_true:"if_true", "true":"if_true", elif:"if_true", else_if:"if_true", elseif:"if_true", "case":"if_true",
+  "when":"if_true", conditional:"if_true", cond:"if_true", guard:"if_true", guarded:"if_true",
+  "else":"if_false", if_false:"if_false", "false":"if_false", otherwise:"if_false", "default":"if_false",
+  loop:"repeat_loop", repeat:"repeat_loop", back:"repeat_loop", "while":"repeat_loop", "for":"repeat_loop", iterate:"repeat_loop",
+  requires:"requires", enabled:"enabled", retry_of:"retry_of", alternative:"alternative"
+};
+/* resolve a trajectory/recipe edge's relation from either `relation` or `condition` */
+function edgeRel(e){
+  if(e.relation!=null){
+    const r=String(e.relation).trim().toLowerCase();
+    if(RELS[r]) return r;
+    if(REL_ALIAS[r]) return REL_ALIAS[r];
+  }
+  if(e.condition!=null){
+    const c=String(e.condition).trim().toLowerCase();
+    if(c===""||c==="always"||c==="true"||c==="unconditional") return "then";
+    return "if_true";              // guarded / conditional transition -> render as "if ..."
+  }
+  return "then";
+}
+function edgeCondText(e){
+  if(e.condition!=null){
+    const c=String(e.condition).trim();
+    if(c && c.toLowerCase()!=="always" && c.toLowerCase()!=="true" && c.toLowerCase()!=="unconditional") return c;
+  }
+  return e.relation_detail || "";
+}
+const MARKER_COLORS = {arr:"#5b6770",arrb:"#0096d6",arro:"#e08a2b",arrp:"#9b5de5",arrg:"#6b7882",arrt:"#1f9e6e",arrf:"#d64545",arrc:"#0b5e86"};
+
+/* ---- causal edge model ----
+   Supports TWO causal edge schemas:
+   (A) Pearl-style: mechanism / direction_confidence / confounding / mediation
+   (B) sub-goal style: confidence / support_type / evidence_span            */
+function isCausalEdge(e){
+  return e && (e.mechanism!=null||e.direction_confidence!=null||e.confounding!=null||e.mediation!=null||
+               e.confidence!=null||e.support_type!=null||e.evidence_span!=null);
+}
+function dirLabel(d){
+  return ({forward:"causes", reverse_possible:"causes (dir?)", bidirectional:"⇄ mutual", independent:"⊥ independent"})[d] || "causes";
+}
+/* unified edge view for BOTH schemas */
+function edgeView(e){
+  const src=layoutPos[e.source]?.node;
+  if(curKind==="causal" || isCausalEdge(e)){
+    // ---- schema B: confidence + support_type + evidence_span ----
+    if(e.support_type!=null || e.confidence!=null || e.evidence_span!=null){
+      const conf = (e.confidence!=null && e.confidence!=="") ? Number(e.confidence) : null;
+      const support = String(e.support_type||"").toLowerCase();
+      const explicit = support ? support==="explicit" : (conf!=null ? conf>=0.6 : true);
+      const stroke = explicit ? css("--cause") : "#9aa7b0";
+      const dash = explicit ? "" : "6 4";
+      const w = conf!=null ? (1.4+conf*2.2) : 2.0;
+      const markerEnd = explicit ? "arrb" : "arrg";
+      const label = conf!=null ? conf.toFixed(2) : "";   // short confidence tag only
+      return {stroke,dash,w,markerEnd,markerStart:"",label,medTag:"",back:false,
+              legendKey:"support:"+(explicit?"explicit":"implicit"),
+              legendLabel:(explicit?"explicit (high-confidence)":"implicit (low-confidence)")+" cause → effect"};
+    }
+    // ---- schema A: Pearl-style causal edge ----
+    const dir=e.direction_confidence||"forward";
+    const fromConf = src && nodeType(src)==="confounder";
+    const latent = fromConf || e.confounding==="latent_confounder_exists";
+    let stroke = latent ? css("--confounder") : "#4a5a64";
+    let dash="", markerEnd="arrc", markerStart="";
+    if(latent){ markerEnd="arro"; dash="5 4"; }
+    if(dir==="reverse_possible"){ dash = dash || "7 4"; }
+    else if(dir==="bidirectional"){ markerStart = markerEnd; }
+    else if(dir==="independent"){ dash="2 4"; markerEnd=""; stroke="#9aa7b0"; }
+    let lab = "";   // keep causal edges clean; mechanism text lives in the node detail panel
+    let medTag = (e.mediation && e.mediation!=="direct")
+        ? (e.mediation==="fully_mediated" ? "mediated" : "partly mediated") : "";
+    return {stroke,dash,w:2.1,markerEnd,markerStart,label:lab,medTag,dir,latent,
+            legendKey:"dir:"+dir+(latent?":latent":""),
+            legendLabel:dirLabel(dir)+(latent?" · latent confounder":""), back:false};
+  }
+  if(curKind==="recipe"){
+    // uniform clean edges: every arrow identical, no labels; loops just curve back geometrically
+    return {stroke:"#5b6770",dash:"",w:1.9,markerEnd:"arr",markerStart:"",label:"",medTag:"",
+            back:false,legendKey:"flow",legendLabel:"flow (loops curve back)"};
+  }
+  const rel=edgeRel(e); const st=RELS[rel]||RELS.then;
+  const cnd=edgeCondText(e);
+  let label;
+  if(rel==="if_true")      label = "if";
+  else if(rel==="if_false")label = "else";
+  else if(rel==="repeat_loop") label = "loop";
+  else                     label = "";     // then / plain sequence: arrow only, no text
+  return {stroke:st.stroke,dash:st.dash,w:st.w,markerEnd:st.marker,markerStart:"",
+          label,medTag:"",back:BACK_RELS.has(rel),legendKey:rel,legendLabel:st.t};
+}
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function nodeLabel(n){ return (n && (n.label || n.sub_goal || n.id)) || ""; }
+function typeColor(t){ const v=(TYPES[t]||{}).c||"var(--action)"; return v.startsWith("var(")? css(v.slice(4,-1)) : v; }
+function typeLabel(t){ return (TYPES[t]||{}).t || t; }
+
+/* ============================================================
+   State
+   ============================================================ */
+let curGraph=null, curKind="unknown", foundGraphs=[], layoutPos={}, bounds={w:800,h:600};
+let view={s:1, tx:0, ty:0};
+let focusId=null;
+let expanded=new Set();          // causal node ids drawn with their recipe nodes showing
+let mmS=1, mmOX=0, mmOY=0; const MW=190, MH=140;
+const el = id => document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ============================================================
+   Robust parsing: extract one or many graphs from arbitrary text
+   ============================================================ */
+function stripToJSONCandidates(text){
+  const out=[];
+  const tagRe=/<(?:trajectory_graph|recipe_graph|causal_graph|graph)>([\s\S]*?)<\/(?:trajectory_graph|recipe_graph|causal_graph|graph)>/gi;
+  let m;
+  while((m=tagRe.exec(text))!==null){ out.push(m[1]); }
+  const fenceRe=/```(?:json)?\s*([\s\S]*?)```/gi;
+  while((m=fenceRe.exec(text))!==null){ out.push(m[1]); }
+  out.push(...braceObjects(text));
+  return out;
+}
+function braceObjects(text){
+  const res=[]; let depth=0, start=-1, inStr=false, esc=false, q="";
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inStr){
+      if(esc){esc=false;}
+      else if(ch==="\\"){esc=true;}
+      else if(ch===q){inStr=false;}
+      continue;
+    }
+    if(ch==='"'||ch==="'"){inStr=true;q=ch;continue;}
+    if(ch==="{"){ if(depth===0)start=i; depth++; }
+    else if(ch==="}"){ depth--; if(depth===0&&start>=0){ res.push(text.slice(start,i+1)); start=-1; } else if(depth<0){depth=0;} }
+  }
+  return res;
+}
+function looseParse(s){
+  if(!s||!s.trim()) return null;
+  const tries=[s];
+  tries.push(s.replace(/,\s*([}\]])/g,"$1"));
+  tries.push(s.replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/,\s*([}\]])/g,"$1"));
+  for(const t of tries){ try{ return JSON.parse(t); }catch(e){} }
+  return null;
+}
+function isGraphLike(o){
+  if(!o||typeof o!=="object") return false;
+  if(o.error) return true; // sentinel guard object
+  return Array.isArray(o.nodes) || Array.isArray(o.edges) ||
+         "interview_id" in o || "source_id" in o || "recipe_summary" in o ||
+         "subject_summary" in o || "outcome_variable" in o;
+}
+function extractGraphs(text){
+  const cands=stripToJSONCandidates(text);
+  const graphs=[], seen=new Set();
+  for(const c of cands){
+    const o=looseParse(c);
+    if(o && isGraphLike(o)){
+      const key=JSON.stringify(o).slice(0,400);
+      if(!seen.has(key)){ seen.add(key); graphs.push(o); }
+    }
+  }
+  if(!graphs.length){
+    const arr=looseParse(text);
+    if(Array.isArray(arr)) arr.forEach(o=>{ if(isGraphLike(o)) graphs.push(o); });
+    else if(arr && isGraphLike(arr)) graphs.push(arr);
+  }
+  return graphs;
+}
+
+/* causal vs recipe vs trajectory detection */
+function isCausalGraph(g){
+  if(!g) return false;
+  if("outcome_variable" in g) return true;
+  if((g.nodes||[]).some(n=>n.var_type!=null||n.sub_goal!=null||n.covers!=null||n.covers_recipe_nodes!=null||n.intervention_strategy!=null)) return true;
+  if((g.edges||[]).some(isCausalEdge)) return true;
+  return false;
+}
+function graphKind(g){
+  if(!g) return "unknown";
+  if(isCausalGraph(g)) return "causal";
+  if("recipe_summary" in g) return "recipe";
+  if("subject_summary" in g || "interview_id" in g) return "trajectory";
+  const ntypes=new Set((g.nodes||[]).map(n=>n.type));
+  const rels=new Set((g.edges||[]).map(e=>e.relation));
+  const hasPrimitive=(g.nodes||[]).some(n=>n.primitive!=null);
+  if(hasPrimitive || RECIPE_TYPES.some(t=>ntypes.has(t)) || ["if_true","if_false","repeat","requires"].some(r=>rels.has(r))) return "recipe";
+  if(TRAJECTORY_TYPES.some(t=>ntypes.has(t)) || ["enabled","retry_of"].some(r=>rels.has(r))) return "trajectory";
+  if("source_id" in g) return "recipe";
+  return "graph";
+}
+
+/* ============================================================
+   Input handlers
+   ============================================================ */
+function renderFromInput(){
+  const text=el('input').value;
+  if(!text||!text.trim()){ setError("Nothing to render","Paste a trajectory, recipe or causal graph, upload a file, or drop one onto the canvas."); return; }
+  const graphs=extractGraphs(text);
+  if(!graphs.length){
+    setError("No graph found","Could not locate a valid JSON graph in the input. Make sure it contains a &lt;trajectory_graph&gt;, &lt;recipe_graph&gt; or &lt;causal_graph&gt; block, or a JSON object with a <b>nodes</b> array.");
+    foundGraphs=[]; el('graphpick').style.display="none"; return;
+  }
+  foundGraphs=graphs;
+  buildGraphPicker();
+  selectGraph(0);
+}
+function buildGraphPicker(){
+  const wrap=el('graphpick'), sel=el('graphsel');
+  if(foundGraphs.length<=1){ wrap.style.display="none"; return; }
+  wrap.style.display="block"; sel.innerHTML="";
+  foundGraphs.forEach((g,i)=>{
+    const o=document.createElement('option'); o.value=i;
+    const kind=graphKind(g);
+    const gname=(typeof g.goal==="string")?g.goal:null;
+    const name=g.recipe_summary||g.subject_summary||gname||g.source_id||g.interview_id||("Graph "+(i+1));
+    o.textContent=(i+1)+". ["+kind+"] "+String(name).slice(0,60);
+    sel.appendChild(o);
+  });
+  sel.onchange=()=>selectGraph(+sel.value);
+}
+function selectGraph(i){
+  curGraph=foundGraphs[i]; focusId=null; curKind=graphKind(curGraph);
+  expanded=new Set(); updateExpandBtn();
+  buildRecipeIndex();
+  showMeta(curGraph);
+  if(curGraph&&curGraph.error){
+    setError("Input guard triggered","This source was classified as <b>"+esc(curGraph.error)+"</b>, so there is no graph to draw (for example a generic advice article rather than a personal account).");
+    el('searchwrap').style.display="none"; el('legendwrap').style.display="none";
+    el('count').textContent=""; return;
+  }
+  if(!curGraph||!(curGraph.nodes&&curGraph.nodes.length)){
+    setError("Empty graph","This object has no nodes to display.");
+    el('searchwrap').style.display="none"; el('legendwrap').style.display="none"; return;
+  }
+  buildFilters(curGraph);
+  buildLegend(curGraph);
+  el('searchwrap').style.display="block";
+  el('legendwrap').style.display="block";
+  updateExpandBtn();
+  layout(curGraph);
+  fit();
+}
+el('file').addEventListener('change', ev=>{
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ el('input').value=r.result; renderFromInput(); };
+  r.readAsText(f);
+  ev.target.value="";
+});
+function clearAll(){
+  el('input').value=""; curGraph=null; foundGraphs=[]; curKind="unknown";
+  expanded=new Set(); updateExpandBtn();
+  el('graphpick').style.display="none"; el('searchwrap').style.display="none";
+  el('legendwrap').style.display="none"; el('detail').style.display="none"; el('meta').innerHTML="";
+  el('count').textContent=""; clearFocusUI();
+  el('minimap').style.display="none";
+  setError("Ready","Paste a trajectory, recipe or causal graph, upload a file, or drop one onto the canvas.");
+  setNavHint();
+}
+
+/* drag & drop */
+(function(){
+  const canvas=el('canvas'), drop=el('drop');
+  ["dragenter","dragover"].forEach(t=>canvas.addEventListener(t,e=>{e.preventDefault();drop.style.display="flex";}));
+  ["dragleave","drop"].forEach(t=>canvas.addEventListener(t,e=>{e.preventDefault(); if(t==="drop"||e.target===drop) drop.style.display="none";}));
+  canvas.addEventListener('drop',e=>{
+    drop.style.display="none";
+    const f=e.dataTransfer.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=()=>{ el('input').value=r.result; renderFromInput(); }; r.readAsText(f);
+  });
+})();
+
+/* ============================================================
+   Layout: columns by phase/level + barycenter row ordering
+   ============================================================ */
+const NW=210, padX=54, padY=76, colW=286, rowH=132;
+const COLGAP=colW-NW, ROWGAP=66;            // spacing between columns / stacked nodes
+const EXPW=320;                              // width of an expanded super-vertex
+const MINI_GAP=8, MINI_LINEH=13, MINI_PAD=11, MINI_GUT=24;  // inner recipe-node rows
+
+/* inner layout for one expanded super-vertex: its recipe nodes stacked in
+   execution order, with the internal arrows resolved to row indices */
+function subLayout(n, boxW){
+  const covers=coversOf(n);
+  const w=boxW-MINI_PAD*2-MINI_GUT-40;   // spine + dot on the left, id + arcs on the right
+  const rows=[]; let y=0;
+  covers.forEach(c=>{
+    const lines=wrapText(c.label||c.id, Math.max(16, Math.floor(w/6.15)));
+    const h=Math.max(21, 7+lines.length*MINI_LINEH);
+    rows.push({id:c.id, type:c.type, label:c.label, lines, y, h, w});
+    y+=h+MINI_GAP;
+  });
+  const idx={}; rows.forEach((r,i)=>idx[r.id]=i);
+  const links=[];
+  internalEdgesOf(n).forEach(e=>{
+    const a=idx[e.source], b=idx[e.target];
+    if(a==null||b==null||a===b) return;
+    links.push({a,b,back:b<a,adj:(b===a+1)});
+  });
+  const hasIn=new Set(), hasOut=new Set();
+  links.forEach(L=>{ hasIn.add(L.b); hasOut.add(L.a); });
+  const dEntry=rows.filter((r,i)=>!hasIn.has(i)).map(r=>r.id);
+  const dExit =rows.filter((r,i)=>!hasOut.has(i)).map(r=>r.id);
+  return {rows, links, idx, dEntry, dExit, h:rows.length?y-MINI_GAP:0};
+}
+function wrapText(s, max){
+  const words=(s||"").split(/\s+/); let lines=[], cur="";
+  for(const w of words){ if((cur+" "+w).trim().length>max){ if(cur)lines.push(cur); cur=w; } else cur=(cur?cur+" ":"")+w; }
+  if(cur)lines.push(cur);
+  if(lines.length>4){ lines=lines.slice(0,4); lines[3]=lines[3].replace(/.{0,1}$/,"…"); }
+  return lines;
+}
+function computeLayers(nodes, edges){
+  // forward graph, excluding explicitly-marked back relations
+  const succ={}; nodes.forEach(n=>succ[n.id]=[]);
+  const fwd=[];
+  edges.forEach(e=>{
+    if(succ[e.source]===undefined||succ[e.target]===undefined) return;
+    const explicitBack = isCausalEdge(e) ? (e.direction_confidence==="bidirectional") : BACK_RELS.has(edgeRel(e));
+    if(explicitBack) return;
+    succ[e.source].push(e.target); fwd.push(e);
+  });
+  // DFS: any edge to a node still on the current stack is a loop/back edge -> drop from layering
+  const color={}, backSet=new Set(), SEP=" ";
+  function dfs(u){
+    color[u]=1;
+    (succ[u]||[]).forEach(v=>{
+      if(color[v]===1) backSet.add(u+SEP+v);      // loop (cycle) edge
+      else if(!color[v]) dfs(v);
+    });
+    color[u]=2;
+  }
+  nodes.forEach(n=>{ if(!color[n.id]) dfs(n.id); });
+  const preds={}; nodes.forEach(n=>preds[n.id]=[]);
+  fwd.forEach(e=>{ if(!backSet.has(e.source+SEP+e.target)) preds[e.target].push(e.source); });
+  const layer={}, state={};
+  function d(u){
+    if(state[u]===1) return 0;             // cycle guard
+    if(layer[u]!=null) return layer[u];
+    state[u]=1; let best=0;
+    preds[u].forEach(p=>{ best=Math.max(best, d(p)+1); });
+    state[u]=0; layer[u]=best; return best;
+  }
+  nodes.forEach(n=>d(n.id));
+  return layer;
+}
+let PHASE_OF={};
+function layout(g){
+  const nodes=g.nodes||[], edges=g.edges||[];
+  const hasPhase=nodes.some(n=>n.phase!=null);
+  const layers=hasPhase?null:computeLayers(nodes,edges);
+  PHASE_OF={};
+  nodes.forEach(n=>{ PHASE_OF[n.id]= n.phase!=null ? n.phase : (layers?layers[n.id]:0); });
+  const phaseVal=n=>PHASE_OF[n.id];
+  const phases=[...new Set(nodes.map(phaseVal))].sort((a,b)=>a-b);
+  const phaseIndex={}; phases.forEach((p,i)=>phaseIndex[p]=i);
+  const byPhase={}; phases.forEach(p=>byPhase[p]=[]);
+  nodes.forEach(n=> byPhase[phaseVal(n)].push(n));
+
+  const idNode={}; nodes.forEach(n=>idNode[n.id]=n);
+  const nbrPrev={}, nbrNext={};
+  nodes.forEach(n=>{nbrPrev[n.id]=[];nbrNext[n.id]=[];});
+  edges.forEach(e=>{
+    const a=idNode[e.source], b=idNode[e.target]; if(!a||!b) return;
+    const pa=phaseIndex[phaseVal(a)], pb=phaseIndex[phaseVal(b)];
+    if(pa<pb){ nbrNext[a.id].push(b.id); nbrPrev[b.id].push(a.id); }
+    else if(pb<pa){ nbrNext[b.id].push(a.id); nbrPrev[a.id].push(b.id); }
+  });
+  const order={}; phases.forEach(p=>byPhase[p].forEach((n,i)=>order[n.id]=i));
+  const meanPos=(ids)=>{ if(!ids.length) return null; let s=0,c=0; ids.forEach(id=>{if(order[id]!=null){s+=order[id];c++;}}); return c?s/c:null; };
+  for(let pass=0;pass<4;pass++){
+    const seq = pass%2===0 ? phases : [...phases].reverse();
+    seq.forEach(p=>{
+      const arr=byPhase[p];
+      const keyed=arr.map((n,i)=>{
+        const b=meanPos(pass%2===0?nbrPrev[n.id]:nbrNext[n.id]);
+        return {n, k:b==null?i:b, i};
+      });
+      keyed.sort((a,b)=> a.k-b.k || a.i-b.i);
+      keyed.forEach((o,i)=>order[o.n.id]=i);
+      byPhase[p]=keyed.map(o=>o.n);
+    });
+  }
+
+  // ---- size every node first (expanded super-vertices are wider and taller) ----
+  const size={};
+  nodes.forEach(n=>{
+    const exp = expanded.has(n.id) && coversOf(n).length>0;
+    const w = exp ? EXPW : NW;
+    const lines = wrapText(nodeLabel(n), exp?38:28);
+    let h = Math.max(60, 34+lines.length*16), sub=null, subTop=0;
+    if(exp){
+      sub = subLayout(n, w);
+      subTop = 34+lines.length*16+8;
+      h = subTop + sub.h + 12;
+    }
+    size[n.id]={w,h,lines,sub,subTop,exp};
+  });
+
+  // ---- column x from the widest node in each column ----
+  const colWs=[], colXs=[];
+  phases.forEach((p,pi)=>{ colWs[pi]=Math.max(NW, ...byPhase[p].map(n=>size[n.id].w)); });
+  let cx=padX;
+  phases.forEach((p,pi)=>{ colXs[pi]=cx; cx+=colWs[pi]+COLGAP; });
+
+  // ---- stack rows by real height so expanded boxes never overlap ----
+  layoutPos={};
+  let maxY=padY;
+  phases.forEach((p,pi)=>{
+    let y=padY;
+    byPhase[p].forEach((n,ni)=>{
+      const s=size[n.id];
+      layoutPos[n.id]={x:colXs[pi], y, w:s.w, h:s.h, lines:s.lines,
+                       sub:s.sub, subTop:s.subTop, exp:s.exp, node:n, pi, ni};
+      y+=s.h+ROWGAP;
+    });
+    maxY=Math.max(maxY, y);
+  });
+  bounds={w:Math.max(padX*2+NW, cx-COLGAP+padX), h:maxY+20,
+          phases, byPhase, phaseIndex, colXs, colWs};
+}
+
+function border(c,p,q){
+  const dx=q.x-c.x, dy=q.y-c.y; if(dx===0&&dy===0)return c;
+  const hw=p.w/2, hh=p.h/2;
+  const sx=dx?hw/Math.abs(dx):Infinity, sy=dy?hh/Math.abs(dy):Infinity;
+  const s=Math.min(sx,sy);
+  return {x:c.x+dx*s, y:c.y+dy*s};
+}
+
+/* ============================================================
+   Draw
+   ============================================================ */
+function marker(id,color){
+  return '<marker id="'+id+'" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="'+color+'"/></marker>';
+}
+function buildSVG(forExport){
+  const g=curGraph; if(!g||!g.nodes) return null;
+  const svg=document.createElementNS(SVGNS,"svg");
+  const W=bounds.w, H=bounds.h;
+  if(forExport){
+    svg.setAttribute("viewBox","0 0 "+W+" "+H);
+    svg.setAttribute("width",W); svg.setAttribute("height",H);
+  } else {
+    // on-screen: coordinate system = screen pixels, so pan/zoom are 1:1
+    svg.setAttribute("class","stage");
+    const canvas=el('canvas');
+    svg.setAttribute("viewBox","0 0 "+(canvas.clientWidth||900)+" "+(canvas.clientHeight||600));
+    svg.setAttribute("preserveAspectRatio","none");
+  }
+
+  const defs=document.createElementNS(SVGNS,"defs");
+  defs.innerHTML=Object.keys(MARKER_COLORS).map(k=>marker(k,MARKER_COLORS[k])).join("");
+  svg.appendChild(defs);
+
+  if(forExport){
+    const bg=document.createElementNS(SVGNS,"rect");
+    bg.setAttribute("x",0);bg.setAttribute("y",0);bg.setAttribute("width",W);bg.setAttribute("height",H);
+    bg.setAttribute("fill","#ffffff"); svg.appendChild(bg);
+  }
+
+  const vp=document.createElementNS(SVGNS,"g");
+  vp.setAttribute("id","viewport");
+  if(!forExport) vp.setAttribute("transform","translate("+view.tx+","+view.ty+") scale("+view.s+")");
+  svg.appendChild(vp);
+
+  const nodes=g.nodes||[], edges=g.edges||[];
+  const search=(el('search')?.value||"").trim().toLowerCase();
+  const showType=activeTypes(), showCert=activeCerts();
+  const visible=id=>{ const n=layoutPos[id]?.node; if(!n) return false;
+    return showType.has(nodeType(n))&&showCert.has(n.certainty||"stated"); };
+  const focusSet=focusNeighborSet();
+  const matches=id=>{ if(!search) return true; const n=layoutPos[id]?.node; if(!n) return false;
+    const strat=(n.intervention_strategy&&n.intervention_strategy.summary)||"";
+    // a super-vertex also matches on the recipe steps collapsed inside it
+    const inCovers=coversOf(n).some(c=>(c.label||"").toLowerCase().includes(search)||c.id.toLowerCase()===search);
+    return nodeLabel(n).toLowerCase().includes(search)||(n.evidence||"").toLowerCase().includes(search)||(n.subtype||"").toLowerCase().includes(search)||(n.mechanism||"").toLowerCase().includes(search)||String(strat).toLowerCase().includes(search)||inCovers; };
+
+  function nodeOpacity(id){
+    if(!visible(id)) return 0.06;
+    if(focusSet && !focusSet.has(id)) return 0.12;
+    if(search && !matches(id)) return 0.14;
+    return 1;
+  }
+
+  // column headers
+  bounds.phases.forEach((p,pi)=>{
+    let lab;
+    if(g.phases && g.phases[p]!=null) lab=g.phases[p];
+    else if(curKind==="causal") lab="Level "+(pi+1);
+    else lab="Phase "+p;
+    const cX=(bounds.colXs&&bounds.colXs[pi]!=null)?bounds.colXs[pi]:padX+pi*colW;
+    const cW=(bounds.colWs&&bounds.colWs[pi]!=null)?bounds.colWs[pi]:NW;
+    const t=document.createElementNS(SVGNS,"text");
+    t.setAttribute("x",cX+cW/2); t.setAttribute("y",40);
+    t.setAttribute("text-anchor","middle"); t.setAttribute("fill","#0b5e86");
+    t.setAttribute("font-weight","bold"); t.setAttribute("font-size","12.5");
+    t.textContent=String(lab); vp.appendChild(t);
+    if(pi>0){
+      const sep=document.createElementNS(SVGNS,"line");
+      sep.setAttribute("x1",cX-COLGAP/2); sep.setAttribute("x2",cX-COLGAP/2);
+      sep.setAttribute("y1",52); sep.setAttribute("y2",bounds.h-20);
+      sep.setAttribute("stroke","#e3edf2"); sep.setAttribute("stroke-width",1);
+      vp.appendChild(sep);
+    }
+  });
+
+  // edges
+  edges.forEach(e=>{
+    const s=layoutPos[e.source], t=layoutPos[e.target]; if(!s||!t) return;
+    const ev=edgeView(e);
+    const sc={x:s.x+s.w/2,y:s.y+s.h/2}, tc={x:t.x+t.w/2,y:t.y+t.h/2};
+    const p1=border(sc,s,tc), p2=border(tc,t,sc);
+    const backward = t.x < s.x - 4;
+    const sameCol = Math.abs(t.x-s.x) < 8;
+    const curved=el('curved').checked;
+    let d;
+    if(backward){
+      const bulge=Math.max(48, Math.abs(sc.y-tc.y)*0.35+40);
+      const y0=s.y+s.h, y1=t.y+t.h;
+      const sx=sc.x, tx=tc.x;
+      const midY=Math.max(y0,y1)+bulge;
+      d="M"+sx+","+y0+" C"+sx+","+midY+" "+tx+","+midY+" "+tx+","+y1;
+    } else if(sameCol){
+      const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+      d="M"+p1.x+","+p1.y+" Q"+(mx+44)+","+my+" "+p2.x+","+p2.y;
+    } else if(curved){
+      const mx=(p1.x+p2.x)/2;
+      d="M"+p1.x+","+p1.y+" C"+mx+","+p1.y+" "+mx+","+p2.y+" "+p2.x+","+p2.y;
+    } else {
+      d="M"+p1.x+","+p1.y+" L"+p2.x+","+p2.y;
+    }
+    const path=document.createElementNS(SVGNS,"path");
+    path.setAttribute("d",d); path.setAttribute("fill","none");
+    path.setAttribute("stroke",ev.stroke); path.setAttribute("stroke-width",ev.w);
+    if(ev.dash) path.setAttribute("stroke-dasharray",ev.dash);
+    if(ev.markerEnd) path.setAttribute("marker-end","url(#"+ev.markerEnd+")");
+    if(ev.markerStart) path.setAttribute("marker-start","url(#"+ev.markerStart+")");
+    const op=Math.min(nodeOpacity(e.source),nodeOpacity(e.target));
+    path.setAttribute("opacity",op<1?Math.max(op,0.05):0.92);
+    vp.appendChild(path);
+
+    if(el('edgelabels').checked){
+      let lx,ly;
+      if(backward){ lx=(sc.x+tc.x)/2; ly=Math.max(s.y+s.h,t.y+t.h)+Math.max(48,Math.abs(sc.y-tc.y)*0.35+40)*0.62; }
+      else { lx=(p1.x+p2.x)/2; ly=(p1.y+p2.y)/2-5; }
+      let txt=ev.label||"";
+      if(ev.medTag) txt = txt ? (txt+" · "+ev.medTag) : ev.medTag;
+      if(txt && txt.length>46) txt=txt.slice(0,45)+"…";
+      if(!txt) return;
+      const lt=document.createElementNS(SVGNS,"text");
+      lt.setAttribute("x",lx);lt.setAttribute("y",ly);lt.setAttribute("text-anchor","middle");
+      lt.setAttribute("font-size","10");lt.setAttribute("fill",ev.stroke);
+      lt.setAttribute("font-style","italic");
+      lt.setAttribute("opacity",op<1?Math.max(op,0.05):1);
+      lt.setAttribute("paint-order","stroke"); lt.setAttribute("stroke","#ffffff"); lt.setAttribute("stroke-width","3"); lt.setAttribute("stroke-linejoin","round");
+      lt.textContent=txt; vp.appendChild(lt);
+    }
+  });
+
+  // nodes
+  const outcomeId = g.outcome_variable;
+  nodes.forEach(n=>{
+    const p=layoutPos[n.id]; if(!p) return;
+    const grp=document.createElementNS(SVGNS,"g"); grp.setAttribute("class","nodebox");
+    grp.setAttribute("opacity",nodeOpacity(n.id));
+    if(!forExport){ grp.addEventListener("click",ev=>{ ev.stopPropagation(); onNodeClick(n); }); }
+    const nt=nodeType(n);
+    const col=typeColor(nt);
+    const boxy=(nt==="condition");
+
+    // goal / outcome / focus emphasis ring
+    if(n.id===outcomeId || n.id===focusId || nt==="goal"){
+      const ring=document.createElementNS(SVGNS,"rect");
+      ring.setAttribute("x",p.x-3);ring.setAttribute("y",p.y-3);ring.setAttribute("width",p.w+6);ring.setAttribute("height",p.h+6);
+      ring.setAttribute("rx",boxy?7:13);ring.setAttribute("fill","none");ring.setAttribute("stroke",col);
+      ring.setAttribute("stroke-width",n.id===focusId?1.4:1.1);ring.setAttribute("opacity",n.id===focusId?.4:.3);
+      grp.appendChild(ring);
+    }
+
+    const rect=document.createElementNS(SVGNS,"rect");
+    rect.setAttribute("x",p.x);rect.setAttribute("y",p.y);rect.setAttribute("width",p.w);rect.setAttribute("height",p.h);
+    rect.setAttribute("rx",boxy?4:10); rect.setAttribute("fill","#fff");
+    rect.setAttribute("stroke",col);
+    const cert=n.certainty||"stated";
+    rect.setAttribute("stroke-width", (n.id===focusId?3.5:(cert==="stated"?2.5:2)));
+    if(cert==="implied")rect.setAttribute("stroke-dasharray","7 4");
+    if(cert==="inferred")rect.setAttribute("stroke-dasharray","2 4");
+    grp.appendChild(rect);
+
+    // header chip
+    const chip=document.createElementNS(SVGNS,"path");
+    const r=boxy?4:10;
+    chip.setAttribute("d","M"+(p.x)+","+(p.y+20)+" L"+(p.x)+","+(p.y+r)+" Q"+p.x+","+p.y+" "+(p.x+r)+","+p.y+" L"+(p.x+p.w-r)+","+p.y+" Q"+(p.x+p.w)+","+p.y+" "+(p.x+p.w)+","+(p.y+r)+" L"+(p.x+p.w)+","+(p.y+20)+" Z");
+    chip.setAttribute("fill",col); grp.appendChild(chip);
+
+    const cov=coversOf(n);
+    const tc1=document.createElementNS(SVGNS,"text");
+    tc1.setAttribute("x",p.x+9);tc1.setAttribute("y",p.y+14);tc1.setAttribute("font-size","10.5");
+    tc1.setAttribute("fill","#fff");tc1.setAttribute("font-weight","bold");
+    const glyph=(TYPES[nt]||{}).g||"";
+    let head=(glyph?glyph+"  ":"")+typeLabel(nt);
+    if(n.role && n.role!=="none") head+=" · "+n.role.replace(/_/g," ");
+    else if(n.subtype) head+=" · "+n.subtype;
+    if(n.optional) head+="  (optional)";
+    const maxHead = cov.length ? 24 : 34;
+    if(head.length>maxHead) head=head.slice(0,maxHead-1)+"…";
+    tc1.textContent=head; grp.appendChild(tc1);
+
+    // ---- expand affordance: how many recipe nodes are collapsed in here ----
+    if(cov.length){
+      const badge=document.createElementNS(SVGNS,"text");
+      badge.setAttribute("x",p.x+p.w-9);badge.setAttribute("y",p.y+14);
+      badge.setAttribute("text-anchor","end");badge.setAttribute("font-size","10.5");
+      badge.setAttribute("fill","#fff");badge.setAttribute("font-weight","bold");
+      badge.setAttribute("opacity",".96");
+      badge.textContent=(p.exp?"⊖":"⊕")+"  "+cov.length+" step"+(cov.length>1?"s":"");
+      grp.appendChild(badge);
+      if(!forExport){
+        const hit=document.createElementNS(SVGNS,"rect");
+        hit.setAttribute("x",p.x);hit.setAttribute("y",p.y);hit.setAttribute("width",p.w);hit.setAttribute("height",20);
+        hit.setAttribute("fill","transparent");hit.setAttribute("cursor","pointer");
+        hit.appendChild(titleEl("Click to "+(p.exp?"collapse":"expand")+" the "+cov.length+" recipe nodes contracted into this sub-goal"));
+        hit.addEventListener("click",ev=>{ ev.stopPropagation(); toggleExpand(n.id); });
+        grp.appendChild(hit);
+      }
+    }
+
+    p.lines.forEach((ln,i)=>{
+      const tx=document.createElementNS(SVGNS,"text");
+      tx.setAttribute("x",p.x+10);tx.setAttribute("y",p.y+38+i*16);tx.setAttribute("font-size","12.5");
+      tx.setAttribute("fill","#111b22"); tx.textContent=ln; grp.appendChild(tx);
+    });
+
+    // ---- expanded body: the collapsed recipe nodes + their internal arrows ----
+    if(p.exp && p.sub) drawSubGraph(grp, p, n, col, forExport);
+
+    vp.appendChild(grp);
+  });
+
+  return svg;
+}
+/* ============================================================
+   Expanded super-vertex: draw the contracted recipe nodes inside the box
+   ============================================================ */
+function titleEl(text){
+  const t=document.createElementNS(SVGNS,"title"); t.textContent=text; return t;
+}
+function drawSubGraph(grp, p, n, col, forExport){
+  const sub=p.sub, top=p.y+p.subTop;
+  const spineX=p.x+MINI_PAD+6;
+  const contentX=spineX+11;
+  const idX=p.x+p.w-MINI_GUT-4;
+  const arcIn=p.x+p.w-MINI_GUT+4, arcOut=p.x+p.w-7;
+  const ee=entryExitOf(n, sub), entry=ee.entry, exit=ee.exit;
+
+  // divider between the sub-goal title and its contracted steps
+  const div=document.createElementNS(SVGNS,"line");
+  div.setAttribute("x1",p.x+9); div.setAttribute("x2",p.x+p.w-9);
+  div.setAttribute("y1",top-9); div.setAttribute("y2",top-9);
+  div.setAttribute("stroke",col); div.setAttribute("stroke-width",1); div.setAttribute("opacity",".22");
+  grp.appendChild(div);
+
+  const dotY=r=>top+r.y+8;
+
+  // internal arrows: consecutive steps run down the spine, jumps and loops arc on the right
+  sub.links.forEach(L=>{
+    const ra=sub.rows[L.a], rb=sub.rows[L.b];
+    const ya=dotY(ra), yb=dotY(rb);
+    const path=document.createElementNS(SVGNS,"path");
+    path.setAttribute("fill","none");
+    if(L.adj){
+      path.setAttribute("d","M"+spineX+","+(ya+5)+" L"+spineX+","+(yb-6));
+      path.setAttribute("stroke","#9fb3bf"); path.setAttribute("stroke-width",1.5);
+      path.setAttribute("marker-end","url(#arr)");
+    }else{
+      const bulge=L.back?arcOut+4:arcOut;
+      path.setAttribute("d","M"+arcIn+","+ya+" Q"+bulge+","+((ya+yb)/2)+" "+arcIn+","+yb);
+      path.setAttribute("stroke",L.back?"#9b5de5":"#0096d6");
+      path.setAttribute("stroke-width",1.5);
+      if(L.back) path.setAttribute("stroke-dasharray","4 3");
+      path.setAttribute("marker-end","url(#"+(L.back?"arrp":"arrb")+")");
+      path.appendChild(titleEl(ra.id+" → "+rb.id+(L.back?"  (loop back)":"  (branch / skip)")));
+    }
+    path.setAttribute("opacity",".85");
+    grp.appendChild(path);
+  });
+
+  // the recipe nodes themselves
+  sub.rows.forEach(r=>{
+    const c=typeColor(nodeType({type:r.type}));
+    const y=top+r.y;
+    const dot=document.createElementNS(SVGNS, entry.has(r.id)||exit.has(r.id)?"rect":"circle");
+    if(dot.tagName==="rect"){
+      dot.setAttribute("x",spineX-4.2);dot.setAttribute("y",dotY(r)-4.2);
+      dot.setAttribute("width",8.4);dot.setAttribute("height",8.4);dot.setAttribute("rx",1.6);
+    }else{
+      dot.setAttribute("cx",spineX);dot.setAttribute("cy",dotY(r));dot.setAttribute("r",4.2);
+    }
+    dot.setAttribute("fill",c);
+    grp.appendChild(dot);
+
+    r.lines.forEach((ln,i)=>{
+      const tx=document.createElementNS(SVGNS,"text");
+      tx.setAttribute("x",contentX); tx.setAttribute("y",y+12+i*MINI_LINEH);
+      tx.setAttribute("font-size","11"); tx.setAttribute("fill","#35424b");
+      tx.textContent=ln; grp.appendChild(tx);
+    });
+
+    const idt=document.createElementNS(SVGNS,"text");
+    idt.setAttribute("x",idX); idt.setAttribute("y",y+12); idt.setAttribute("text-anchor","end");
+    idt.setAttribute("font-size","9"); idt.setAttribute("fill","#9aa7b0");
+    idt.textContent=r.id; grp.appendChild(idt);
+
+    if(!forExport){
+      const hit=document.createElementNS(SVGNS,"rect");
+      hit.setAttribute("x",p.x+4);hit.setAttribute("y",y-2);
+      hit.setAttribute("width",p.w-8);hit.setAttribute("height",r.h+2);
+      hit.setAttribute("fill","transparent");
+      hit.appendChild(titleEl(r.id+" · "+typeLabel(nodeType({type:r.type}))+"\n"+(r.label||"")+
+        (entry.has(r.id)?"\n(flow enters the sub-goal here)":"")+
+        (exit.has(r.id)?"\n(flow leaves the sub-goal here)":"")));
+      grp.appendChild(hit);
+    }
+  });
+}
+
+/* ============================================================
+   Expand / collapse super-vertices
+   ============================================================ */
+function expandableIds(){
+  return ((curGraph&&curGraph.nodes)||[]).filter(n=>coversOf(n).length).map(n=>n.id);
+}
+function relayout(){ if(curGraph&&curGraph.nodes){ layout(curGraph); draw(); } }
+function toggleExpand(id){
+  if(expanded.has(id)) expanded.delete(id); else expanded.add(id);
+  relayout(); updateExpandBtn();
+  const n=((curGraph&&curGraph.nodes)||[]).find(x=>x.id===id);
+  if(n && el('detail').style.display==="block") showDetail(n);
+}
+function toggleExpandAll(){
+  const ids=expandableIds(); if(!ids.length) return;
+  if(ids.every(i=>expanded.has(i))) expanded.clear(); else ids.forEach(i=>expanded.add(i));
+  relayout(); updateExpandBtn();
+  const n=focusId?((curGraph&&curGraph.nodes)||[]).find(x=>x.id===focusId):null;
+  if(n && el('detail').style.display==="block") showDetail(n);
+}
+function updateExpandBtn(){
+  const b=el('expbtn'); if(!b) return;
+  const ids=expandableIds();
+  if(!ids.length){ b.style.display="none"; return; }
+  b.style.display="inline-block";
+  b.textContent = ids.every(i=>expanded.has(i)) ? "Collapse all" : "Expand all";
+}
+
+function draw(){
+  const canvas=el('canvas');
+  clearErrorOverlay();
+  canvas.querySelectorAll('svg.stage').forEach(s=>s.remove());
+  const svg=buildSVG(false);
+  if(!svg) return;
+  // keep minimap + hint on top of the stage
+  canvas.insertBefore(svg, el('minimap'));
+  attachPanZoom(svg);
+  const g=curGraph;
+  let cnt=(g.nodes.length)+" nodes · "+((g.edges||[]).length)+" edges";
+  const covered=(g.nodes||[]).reduce((s,n)=>s+coversOf(n).length,0);
+  if(covered) cnt+=" · "+covered+" recipe steps inside";
+  el('count').textContent=cnt;
+  buildMinimap();
+  updateHud();
+  setNavHint();
+}
+
+/* ============================================================
+   Pan / zoom / fit / HUD
+   ============================================================ */
+function applyTransform(){
+  const vp=document.querySelector('#viewport');
+  if(vp) vp.setAttribute("transform","translate("+view.tx+","+view.ty+") scale("+view.s+")");
+  updateHud(); updateMinimapViewport();
+}
+function fit(){
+  const canvas=el('canvas');
+  const cw=canvas.clientWidth||900, ch=canvas.clientHeight||600;
+  const s=Math.min(cw/bounds.w, ch/bounds.h)*0.94;
+  view.s=clamp(s,0.05,4);
+  view.tx=(cw-bounds.w*view.s)/2;
+  view.ty=(ch-bounds.h*view.s)/2;
+  draw();
+}
+function zoomStep(f){
+  const canvas=el('canvas');
+  zoomAt(canvas.clientWidth/2, canvas.clientHeight/2, f);
+}
+function zoomAt(cx,cy,f){
+  const ns=clamp(view.s*f,0.05,4);
+  const k=ns/view.s;
+  view.tx=cx-(cx-view.tx)*k;
+  view.ty=cy-(cy-view.ty)*k;
+  view.s=ns;
+  applyTransform();
+}
+function setZoomAbs(ns,cx,cy){
+  const canvas=el('canvas');
+  if(cx==null){ cx=canvas.clientWidth/2; cy=canvas.clientHeight/2; }
+  ns=clamp(ns,0.05,4);
+  const k=ns/view.s;
+  view.tx=cx-(cx-view.tx)*k; view.ty=cy-(cy-view.ty)*k; view.s=ns;
+  applyTransform();
+}
+function updateHud(){
+  const z=Math.round(view.s*100);
+  const v=el('zoomval'); if(v) v.textContent=z+"%";
+  const s=el('zoomrange'); if(s && document.activeElement!==s) s.value=clamp(z,5,400);
+}
+function attachPanZoom(svg){
+  let dragging=false, sx=0, sy=0, moved=false;
+  svg.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const rect=svg.getBoundingClientRect();
+    const px=e.clientX-rect.left, py=e.clientY-rect.top;
+    const scrollZoom=el('scrollzoom').checked;
+    if(e.ctrlKey){                                   // pinch / ctrl+wheel => zoom to cursor
+      zoomAt(px,py, e.deltaY<0?1.08:1/1.08);
+    } else if(scrollZoom){                            // opt-in: plain wheel zooms
+      zoomAt(px,py, e.deltaY<0?1.12:1/1.12);
+    } else {                                          // default: two-finger / wheel pans
+      view.tx-=e.deltaX; view.ty-=e.deltaY; applyTransform();
+    }
+  },{passive:false});
+  svg.addEventListener('mousedown',e=>{ dragging=true; moved=false; sx=e.clientX; sy=e.clientY; el('canvas').classList.add('dragging'); });
+  window.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    view.tx+=e.clientX-sx; view.ty+=e.clientY-sy; sx=e.clientX; sy=e.clientY;
+    moved=true; applyTransform();
+  });
+  window.addEventListener('mouseup',()=>{ dragging=false; el('canvas').classList.remove('dragging'); });
+  svg.addEventListener('dblclick',e=>{
+    const rect=svg.getBoundingClientRect();
+    zoomAt(e.clientX-rect.left, e.clientY-rect.top, 1.5);
+  });
+  svg.addEventListener('click',e=>{ if(!moved && (e.target.tagName==="svg"||e.target.id==="viewport")) clearFocus(); });
+}
+
+/* ============================================================
+   Minimap
+   ============================================================ */
+function buildMinimap(){
+  const mm=el('minimap');
+  if(!curGraph||!curGraph.nodes||!Object.keys(layoutPos).length){ mm.style.display="none"; return; }
+  mm.style.display="block";
+  const pad=10;
+  mmS=Math.min((MW-2*pad)/bounds.w,(MH-2*pad)/bounds.h);
+  mmOX=(MW-bounds.w*mmS)/2; mmOY=(MH-bounds.h*mmS)/2;
+  let r='<svg width="'+MW+'" height="'+MH+'">';
+  r+='<rect x="0" y="0" width="'+MW+'" height="'+MH+'" fill="#fbfdff"/>';
+  for(const id in layoutPos){
+    const p=layoutPos[id]; const c=typeColor(nodeType(p.node));
+    r+='<rect x="'+(mmOX+p.x*mmS).toFixed(1)+'" y="'+(mmOY+p.y*mmS).toFixed(1)+'" width="'+Math.max(2,p.w*mmS).toFixed(1)+'" height="'+Math.max(2,p.h*mmS).toFixed(1)+'" rx="1.5" fill="'+c+'" opacity="0.85"/>';
+  }
+  r+='<rect class="vp" id="mmvp" x="0" y="0" width="0" height="0"/>';
+  r+='</svg>';
+  mm.innerHTML='<span class="mmttl">Overview</span>'+r;
+  updateMinimapViewport();
+}
+function updateMinimapViewport(){
+  const vp=el('mmvp'); if(!vp) return;
+  const canvas=el('canvas'); const cw=canvas.clientWidth, ch=canvas.clientHeight;
+  const gx=-view.tx/view.s, gy=-view.ty/view.s, gw=cw/view.s, gh=ch/view.s;
+  vp.setAttribute('x',(mmOX+gx*mmS).toFixed(1));
+  vp.setAttribute('y',(mmOY+gy*mmS).toFixed(1));
+  vp.setAttribute('width',Math.max(4,gw*mmS).toFixed(1));
+  vp.setAttribute('height',Math.max(4,gh*mmS).toFixed(1));
+}
+(function(){
+  const mm=el('minimap'); let drag=false;
+  function go(ev){
+    const rect=mm.getBoundingClientRect();
+    const mx=ev.clientX-rect.left, my=ev.clientY-rect.top;
+    const gx=(mx-mmOX)/mmS, gy=(my-mmOY)/mmS;
+    const canvas=el('canvas');
+    view.tx=canvas.clientWidth/2-gx*view.s;
+    view.ty=canvas.clientHeight/2-gy*view.s;
+    applyTransform();
+  }
+  mm.addEventListener('mousedown',e=>{ drag=true; go(e); e.preventDefault(); e.stopPropagation(); });
+  window.addEventListener('mousemove',e=>{ if(drag) go(e); });
+  window.addEventListener('mouseup',()=>{ drag=false; });
+})();
+
+/* ============================================================
+   Focus / neighbors
+   ============================================================ */
+function focusNeighborSet(){
+  if(!focusId||!curGraph) return null;
+  const set=new Set([focusId]);
+  (curGraph.edges||[]).forEach(e=>{ if(e.source===focusId) set.add(e.target); if(e.target===focusId) set.add(e.source); });
+  return set;
+}
+function onNodeClick(n){
+  showDetail(n);
+  focusId=n.id;
+  el('focusbar').style.display="flex";
+  el('focusname').textContent=nodeLabel(n).slice(0,42);
+  draw();
+}
+function clearFocus(){ focusId=null; clearFocusUI(); draw(); }
+function clearFocusUI(){ el('focusbar').style.display="none"; }
+
+/* ============================================================
+   Search & filters
+   ============================================================ */
+function buildFilters(g){
+  const typesPresent=[...new Set((g.nodes||[]).map(nodeType))];
+  typesPresent.sort((a,b)=>Object.keys(TYPES).indexOf(a)-Object.keys(TYPES).indexOf(b));
+  const tf=el('typefilters'); tf.innerHTML="";
+  typesPresent.forEach(t=>{
+    const id="tf_"+t;
+    const lab=document.createElement('label');
+    lab.innerHTML='<input type="checkbox" id="'+id+'" checked onchange="applyView()"><span class="sw" style="background:'+typeColor(t)+'"></span>'+typeLabel(t);
+    tf.appendChild(lab);
+  });
+  const certsPresent=[...new Set((g.nodes||[]).map(n=>n.certainty||"stated"))];
+  const order=["stated","implied","inferred"];
+  certsPresent.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+  const cf=el('certfilters'); cf.innerHTML="";
+  certsPresent.forEach(c=>{
+    const lab=document.createElement('label');
+    lab.innerHTML='<input type="checkbox" id="cf_'+c+'" checked onchange="applyView()">'+c;
+    cf.appendChild(lab);
+  });
+  el('search').value="";
+}
+function activeTypes(){
+  const s=new Set();
+  el('typefilters').querySelectorAll('input:checked').forEach(i=>s.add(i.id.slice(3)));
+  return s;
+}
+function activeCerts(){
+  const s=new Set();
+  el('certfilters').querySelectorAll('input:checked').forEach(i=>s.add(i.id.slice(3)));
+  return s;
+}
+function applyView(){ draw(); }
+
+/* ============================================================
+   Legend (adapts to schema present)
+   ============================================================ */
+function buildLegend(g){
+  const typesPresent=[...new Set((g.nodes||[]).map(nodeType))];
+  typesPresent.sort((a,b)=>Object.keys(TYPES).indexOf(a)-Object.keys(TYPES).indexOf(b));
+  const L=el('legend'); L.innerHTML="";
+  typesPresent.forEach(k=>{
+    const d=document.createElement('div'); d.className="legrow";
+    d.innerHTML="<span class='sw' style='background:"+typeColor(k)+"'></span> "+((TYPES[k]||{}).g?(TYPES[k].g+" "):"")+typeLabel(k);
+    L.appendChild(d);
+  });
+  // edges
+  const E=el('edgelegend'); E.innerHTML="";
+  const seen=new Set(); const rows=[];
+  (g.edges||[]).forEach(e=>{
+    const ev=edgeView(e);
+    if(seen.has(ev.legendKey)) return; seen.add(ev.legendKey);
+    rows.push(ev);
+  });
+  rows.forEach(ev=>{
+    const d=document.createElement('div'); d.className="legrow";
+    const dash=ev.dash?' stroke-dasharray="'+ev.dash+'"':'';
+    const me=ev.markerEnd?' marker-end="url(#'+ev.markerEnd+')"':'';
+    const ms=ev.markerStart?' marker-start="url(#'+ev.markerStart+')"':'';
+    d.innerHTML='<svg width="40" height="12"><defs>'+
+      Object.keys(MARKER_COLORS).map(k=>marker(k,MARKER_COLORS[k])).join("")+
+      '</defs><line x1="4" y1="6" x2="34" y2="6" stroke="'+ev.stroke+'" stroke-width="'+ev.w+'"'+dash+me+ms+'/></svg> '+esc(ev.legendLabel||"");
+    E.appendChild(d);
+  });
+  if(curKind==="causal"){
+    const usesSupport=(g.edges||[]).some(e=>e.support_type!=null||e.confidence!=null||e.evidence_span!=null);
+    const note=document.createElement('div'); note.className="small"; note.style.marginTop="6px";
+    note.textContent= usesSupport
+      ? "Solid = explicit / high-confidence edge · dashed grey = implicit / low-confidence · number on edge = confidence."
+      : "Dashed amber = latent-confounder edge · dashed = direction uncertain · dotted = independent.";
+    E.appendChild(note);
+  }
+  if(hasCovers(g)){
+    const L2=document.createElement('div'); L2.className="legend"; L2.style.marginTop="8px";
+    L2.innerHTML=
+      "<div class='divlabel'>Inside an expanded sub-goal</div>"+
+      "<div class='legrow'><span class='sw' style='background:#9fb3bf;height:3px;border-radius:2px'></span> next step (runs down the spine)</div>"+
+      "<div class='legrow'><span class='sw' style='background:#0096d6;height:3px;border-radius:2px'></span> branch / skip (arc on the right)</div>"+
+      "<div class='legrow'><span class='sw' style='background:#9b5de5;height:3px;border-radius:2px'></span> loop back (dashed arc)</div>"+
+      "<div class='legrow'><span class='sw' style='background:#6b7882;border-radius:2px'></span> square dot = entry / exit of the sub-goal</div>"+
+      "<div class='small' style='margin-top:4px'>Click a node's ⊕ header to expand it in place.</div>";
+    el('edgelegend').appendChild(L2);
+  }
+}
+
+/* ============================================================
+   Side panels
+   ============================================================ */
+function showMeta(g){
+  const m=el('meta');
+  if(!g){m.innerHTML="";return;}
+  const kind=graphKind(g);
+  if(g.error){ m.innerHTML="<div><span class='pill kind'>guard</span></div><div class='small' style='margin-top:6px'>Sentinel output</div>"; el('detail').style.display="none"; return; }
+  const goalStr=(typeof g.goal==="string")?g.goal:null;
+  const title=g.subject_summary||g.recipe_summary||goalStr||g.interview_id||g.source_id||"Graph";
+  let h="<div><span class='pill kind'>"+kind+"</span></div>";
+  h+="<div class='ttl' style='margin-top:6px'>"+esc(title)+"</div>";
+  const idv=g.interview_id||g.source_id;
+  if(idv)h+="<div class='small'>id: "+esc(idv)+"</div>";
+  if(g.domain)h+="<div style='margin-top:6px'><span class='pill'>"+esc(g.domain)+"</span></div>";
+  if(kind==="causal" && g.outcome_variable){
+    const on=(g.nodes||[]).find(n=>n.id===g.outcome_variable);
+    h+="<div class='small' style='margin-top:6px'>outcome (Y): <b>"+esc(on?nodeLabel(on):g.outcome_variable)+"</b></div>";
+  }
+  // contraction coverage: did every recipe node land in a super-vertex?
+  const covTotal=(g.nodes||[]).reduce((s,n)=>s+coversOf(n).length,0);
+  if(covTotal){
+    const cv=g.coverage||{};
+    const declared=cv.recipe_node_count!=null?Number(cv.recipe_node_count):null;
+    const supers=(g.nodes||[]).filter(n=>coversOf(n).length).length;
+    const ratio=supers?(covTotal/supers).toFixed(1):"–";
+    h+="<div class='small' style='margin-top:6px'>contraction: <b>"+covTotal+"</b> recipe steps → <b>"+
+       supers+"</b> sub-goals ("+ratio+"× )</div>";
+    if(RECIPE_IDX)
+      h+="<div class='small' style='margin-top:4px;color:#0b7285'>labels joined from the recipe graph in this paste</div>";
+    // legacy export: ids with no labels anywhere
+    const bare=(g.nodes||[]).some(n=>rawCovers(n).some(c=>!c.label));
+    if(bare && !RECIPE_IDX)
+      h+="<div class='warn'>These sub-goals list recipe ids without labels (older extraction). "+
+         "Re-run the causal step with prompt 7, or paste the matching recipe graph together with this one.</div>";
+    const miss=Array.isArray(cv.unassigned)?cv.unassigned:[];
+    if(declared!=null && declared!==covTotal)
+      h+="<div class='warn'>Coverage gap: the graph declares "+declared+" recipe nodes but only "+
+         covTotal+" are listed inside sub-goals.</div>";
+    else if(miss.length)
+      h+="<div class='warn'>Unassigned recipe nodes: "+miss.map(esc).join(", ")+"</div>";
+  }
+  if(g.notes)h+="<div class='small' style='margin-top:6px'>"+esc(g.notes)+"</div>";
+  if(g.unknowns&&g.unknowns.length){
+    h+="<div style='margin-top:10px'><div class='divlabel' style='color:#0b5e86'>Unknowns ("+g.unknowns.length+")</div><ul class='unk' style='margin:4px 0 0 16px;padding:0'>";
+    g.unknowns.forEach(u=>h+="<li>"+esc(u)+"</li>"); h+="</ul></div>";
+  }
+  m.innerHTML=h;
+  el('detail').style.display="none";
+}
+function showDetail(n){
+  const d=el('detail'); d.style.display="block";
+  const nt=nodeType(n);
+  let h="<div class='divlabel'>Selected node</div>";
+  h+="<b style='font-size:13.5px'>"+esc(nodeLabel(n))+"</b>";
+  h+="<div style='margin-top:6px'><span class='pill' style='background:"+hexToTint(typeColor(nt))+";color:"+typeColor(nt)+"'>"+typeLabel(nt)+"</span>";
+  h+="<span class='pill'>"+esc(n.certainty||"stated")+"</span>";
+  // causal-specific
+  if(n.role && n.role!=="none")h+="<span class='pill'>role: "+esc(n.role.replace(/_/g,' '))+"</span>";
+  if(n.values)h+="<span class='pill'>values: "+esc(n.values)+"</span>";
+  if(n.exogenous===true)h+="<span class='pill'>exogenous</span>";
+  if(n.recipe_refs && n.recipe_refs.length)h+="<span class='pill'>recipe: "+n.recipe_refs.map(esc).join(", ")+"</span>";
+  const _cov=coversOf(n);
+  if(_cov.length)h+="<span class='pill'>"+_cov.length+" recipe step"+(_cov.length>1?"s":"")+" collapsed</span>";
+  if(curGraph && n.id===curGraph.outcome_variable)h+="<span class='pill' style='background:var(--outcome);color:#fff'>outcome Y</span>";
+  // trajectory/recipe-specific
+  if(n.primitive&&!TYPES[n.type])h+="<span class='pill'>primitive: "+esc(n.primitive)+"</span>";
+  if(n.subtype)h+="<span class='pill'>"+esc(n.subtype)+"</span>";
+  if(n.stop_condition)h+="<span class='pill'>until: "+esc(n.stop_condition)+"</span>";
+  if(n.optional)h+="<span class='pill'>optional</span>";
+  if(n.time_hint)h+="<span class='pill'>⏱ "+esc(n.time_hint)+"</span>";
+  if(n.location)h+="<span class='pill'>📍 "+esc(n.location)+"</span>";
+  if(n.confidence!=null)h+="<span class='pill'>conf "+esc(n.confidence)+"</span>";
+  if(n.actors&&n.actors.length)h+="<span class='pill'>👤 "+n.actors.map(esc).join(", ")+"</span>";
+  if(n.tags&&n.tags.length)h+="<span class='pill'>#"+n.tags.map(esc).join(" #")+"</span>";
+  h+="</div>";
+  // intervention strategy (sub-goal causal schema)
+  const _iv=n.intervention_strategy||{};
+  const _key=new Set(_iv.key_recipe_nodes||_iv.recipe_node_ids||_iv.recipe_nodes||[]);
+  if(_iv.summary)h+="<div class='divlabel' style='margin-top:8px'>Intervention strategy</div><div class='q'>"+esc(_iv.summary)+"</div>";
+  if(n.evidence)h+="<div class='q'>“"+esc(n.evidence)+"”</div>";
+
+  // ---- what was collapsed into this super-vertex ----
+  if(_cov.length){
+    const _ee=entryExitOf(n), ent=_ee.entry, ext=_ee.exit;
+    // legacy graphs copied the whole cover list into recipe_node_ids — that is not a highlight
+    const showKey=_key.size>0 && _key.size<_cov.length;
+    const ie=internalEdgesOf(n);
+    const isOpen=expanded.has(n.id);
+    h+="<div class='divlabel covhdr' style='margin-top:10px'>Collapsed recipe steps ("+_cov.length+")"+
+       "<a class='dl' style='float:right;font-weight:normal;text-transform:none;letter-spacing:0' "+
+       "onclick=\"toggleExpand('"+esc(String(n.id)).replace(/'/g,"\\'")+"')\">"+
+       (isOpen?"collapse in graph":"show in graph")+"</a></div>";
+    h+="<div class='covlist'>";
+    _cov.forEach(c=>{
+      const t=nodeType({type:c.type});
+      h+="<div class='covrow' title='"+esc(typeLabel(t))+"'>"+
+         "<span class='cdot' style='background:"+typeColor(t)+"'></span>"+
+         "<span class='cid'>"+esc(c.id)+"</span>"+
+         "<span class='clab'>"+esc(c.label||c.id)+"</span>"+
+         (showKey&&_key.has(c.id)?"<span class='ctag key'>key</span>":"")+
+         (ent.has(c.id)?"<span class='ctag'>entry</span>":"")+
+         (ext.has(c.id)?"<span class='ctag'>exit</span>":"")+
+         "</div>";
+    });
+    h+="</div>";
+    if(ie.length){
+      const loops=ie.filter(e=>{
+        const i=_cov.findIndex(c=>c.id===e.source), j=_cov.findIndex(c=>c.id===e.target);
+        return i>=0&&j>=0&&j<i;
+      }).length;
+      h+="<div class='small' style='margin-top:4px'>"+ie.length+" internal arrow"+(ie.length>1?"s":"")+
+         (loops?" · "+loops+" loop back":"")+"</div>";
+    }
+  }
+
+  const outs=(curGraph.edges||[]).filter(e=>e.source===n.id);
+  const ins=(curGraph.edges||[]).filter(e=>e.target===n.id);
+  const nm=id=>{const nn=layoutPos[id]?.node; return nn?esc(nodeLabel(nn).slice(0,40)):esc(id);};
+  const relText=e=>{
+    if(curKind==="causal" || isCausalEdge(e)){
+      if(e.support_type!=null || e.confidence!=null || e.evidence_span!=null){
+        let s="causes";
+        if(e.confidence!=null && e.confidence!=="") s+=" ("+Number(e.confidence).toFixed(2)+")";
+        if(e.support_type) s+=" · "+e.support_type;
+        return esc(s);
+      }
+      let s=dirLabel(e.direction_confidence||"forward");
+      if(e.mediation&&e.mediation!=="direct")s+=" · "+e.mediation.replace(/_/g,' ');
+      if(e.confounding==="latent_confounder_exists")s+=" · confounded";
+      return esc(s);
+    }
+    const r=edgeRel(e), c=edgeCondText(e);
+    const base=(RELS[r]||RELS.then).t||r;
+    return esc(base)+(c?" ("+esc(c)+")":"");
+  };
+  // which concrete recipe steps hand off across a causal edge
+  const handoff=e=>{
+    const re=Array.isArray(e.recipe_edges)?e.recipe_edges:[];
+    if(!re.length) return "";
+    const txt=re.slice(0,4).map(x=>esc(x.source)+"→"+esc(x.target)).join(", ");
+    return "<div class='small' style='margin-left:10px;color:#6b7882'>↳ via "+txt+(re.length>4?", …":"")+"</div>";
+  };
+  if(ins.length){
+    h+="<div class='divlabel' style='margin-top:8px'>Incoming</div>";
+    ins.forEach(e=>{ h+="<div class='small'>"+relText(e)+" ← "+nm(e.source)+"</div>"+handoff(e); });
+  }
+  if(outs.length){
+    h+="<div class='divlabel' style='margin-top:8px'>Outgoing</div>";
+    outs.forEach(e=>{
+      h+="<div class='small'>"+relText(e)+" → "+nm(e.target)+"</div>";
+      if(e.mechanism)h+="<div class='small' style='margin-left:10px;color:#6b7882'>↳ "+esc(e.mechanism)+"</div>";
+      h+=handoff(e);
+      if(e.evidence_span)h+="<div class='small' style='margin-left:10px;color:#6b7882'>↳ “"+esc(String(e.evidence_span).slice(0,140))+"”</div>";
+    });
+  }
+  if(curKind!=="causal"){
+    const ph=(n.phase!=null?n.phase:(PHASE_OF[n.id]!=null?PHASE_OF[n.id]+" (auto)":0));
+    h+="<div class='small' style='margin-top:8px'>phase "+esc(ph)+" · id "+esc(n.id)+"</div>";
+  } else {
+    h+="<div class='small' style='margin-top:8px'>id "+esc(n.id)+"</div>";
+  }
+  d.innerHTML=h;
+}
+function hexToTint(hex){
+  const m=hex.replace('#','').match(/.{2}/g); if(!m) return "var(--tint)";
+  const [r,gc,b]=m.map(x=>parseInt(x,16));
+  return "rgba("+r+","+gc+","+b+",0.13)";
+}
+function esc(s){return (s+"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function setError(title,msg){
+  const canvas=el('canvas');
+  canvas.querySelectorAll('svg.stage').forEach(s=>s.remove());
+  el('minimap').style.display="none";
+  let ov=canvas.querySelector('.err'); if(ov) ov.remove();
+  const div=document.createElement('div'); div.className="err";
+  div.innerHTML="<div class='box'><div class='big'>◔</div><h3>"+title+"</h3><div>"+msg+"</div></div>";
+  canvas.insertBefore(div, el('minimap'));
+}
+function clearErrorOverlay(){ const ov=el('canvas').querySelector('.err'); if(ov) ov.remove(); }
+function setNavHint(){
+  const h=el('navhint');
+  if(!curGraph||!curGraph.nodes){ h.style.display="none"; return; }
+  const zoomMode=el('scrollzoom').checked ? "scroll to zoom · drag to pan" : "scroll/2-finger to pan · pinch or Ctrl+scroll to zoom";
+  h.style.display="block";
+  const expHint=expandableIds().length ? " · <b>click the ⊕ header</b> to see the recipe steps inside a sub-goal · <b>E</b> expand all" : "";
+  h.innerHTML="<b>"+zoomMode+"</b> · double-click to zoom · <b>F</b> fit · <b>+/−</b> zoom · click a node to focus"+expHint;
+}
+
+/* ============================================================
+   Export
+   ============================================================ */
+function downloadSVG(){
+  const svg=buildSVG(true); if(!svg) return;
+  const str='<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(svg);
+  const blob=new Blob([str],{type:"image/svg+xml"});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=fileBase()+".svg"; a.click();
+}
+function downloadPNG(){
+  const svg=buildSVG(true); if(!svg) return;
+  const scale=2;
+  const str=new XMLSerializer().serializeToString(svg);
+  const img=new Image();
+  const blob=new Blob([str],{type:"image/svg+xml;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  img.onload=()=>{
+    const c=document.createElement('canvas');
+    c.width=bounds.w*scale; c.height=bounds.h*scale;
+    const ctx=c.getContext('2d'); ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+    ctx.setTransform(scale,0,0,scale,0,0);
+    ctx.drawImage(img,0,0);
+    URL.revokeObjectURL(url);
+    c.toBlob(b=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=fileBase()+".png"; a.click(); },"image/png");
+  };
+  img.onerror=()=>{ URL.revokeObjectURL(url); alert("PNG export failed in this browser; the SVG export will still work."); };
+  img.src=url;
+}
+function fileBase(){
+  const g=curGraph||{}; return (g.interview_id||g.source_id||graphKind(g)||"graph").replace(/[^\w\-]+/g,"_");
+}
+
+/* ============================================================
+   Keyboard + slider + prefs + init
+   ============================================================ */
+el('zoomrange').addEventListener('input',e=>{ setZoomAbs((+e.target.value)/100); });
+function saveScrollPref(){ try{ localStorage.setItem('qcri_scrollzoom', el('scrollzoom').checked?'1':'0'); }catch(_){} setNavHint(); }
+
+window.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||"").toLowerCase();
+  if(tag==="textarea"||tag==="input"||tag==="select") return;
+  if(!curGraph||!curGraph.nodes) return;
+  const P=70;
+  switch(e.key){
+    case 'f': case 'F': case '0': fit(); e.preventDefault(); break;
+    case '+': case '=': zoomStep(1.2); e.preventDefault(); break;
+    case '-': case '_': zoomStep(1/1.2); e.preventDefault(); break;
+    case 'ArrowLeft':  view.tx+=P; applyTransform(); e.preventDefault(); break;
+    case 'ArrowRight': view.tx-=P; applyTransform(); e.preventDefault(); break;
+    case 'ArrowUp':    view.ty+=P; applyTransform(); e.preventDefault(); break;
+    case 'ArrowDown':  view.ty-=P; applyTransform(); e.preventDefault(); break;
+    case 'e': case 'E': if(expandableIds().length){ toggleExpandAll(); e.preventDefault(); } break;
+    case 'Escape': clearFocus(); break;
+  }
+});
+window.addEventListener('resize',()=>{
+  if(curGraph&&curGraph.nodes){
+    const svg=el('canvas').querySelector('svg.stage');
+    if(svg){ const c=el('canvas'); svg.setAttribute("viewBox","0 0 "+c.clientWidth+" "+c.clientHeight); }
+    applyTransform();
+  }
+});
+
+// restore scroll preference
+try{ if(localStorage.getItem('qcri_scrollzoom')==='1') el('scrollzoom').checked=true; }catch(_){}
+clearAll();
+</script>
+</body>
+</html>
